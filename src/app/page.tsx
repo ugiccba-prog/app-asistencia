@@ -30,8 +30,9 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 // Contraseña para el Panel Maestro de UGI
 const CLAVE_ADMIN = 'ugi2026';
 
-// URL fija del Google Apps Script de UGI (si además la guardás en el Panel Maestro, queda en Supabase para todos los dispositivos)
-const GOOGLE_SCRIPT_URL_FIJA = '';
+// URL fija del Google Apps Script de UGI (conectada directamente a la cuenta de Google Drive de UGI)
+const GOOGLE_SCRIPT_URL_FIJA =
+  'https://script.google.com/macros/s/AKfycbwCqh1aY9nOkgp2getRYfkeg_zz7jis6gDf1SOUZyuD3UaJlsaRxRcsmsb_SCedQvY1/exec';
 
 // Lista oficial de Deportes definida por UGI (con PIN Profe y PIN Coordinador por defecto)
 const DEPORTES_OFICIALES = [
@@ -1135,50 +1136,37 @@ export default function AsistenciaApp() {
           ) : (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 mb-5">
               <div className="text-xs font-bold text-emerald-950 mb-1">
-                📊 Motor de Google Sheets (En tu cuenta de Google Drive)
+                📊 Planillas Google Sheets por Deporte (En tu cuenta • Solo Lectura)
               </div>
-              <p className="text-[11px] text-emerald-800 mb-2">
-                Pegá acá tu URL <code>/exec</code> y tocá <b>&quot;Guardar para Todos&quot;</b> así queda grabada en la base de datos para todos los celulares y navegadores:
+              <p className="text-[11px] text-emerald-800 mb-3">
+                Tocá cualquier deporte para abrir su planilla en vivo (si aún no estaba creada, la crea en el acto en tu carpeta <b>UGI - Asistencias en Vivo</b>):
               </p>
-              <div className="flex flex-col sm:flex-row gap-2 mb-2">
-                <input
-                  type="url"
-                  placeholder="Pegá acá la URL /exec de tu Google Apps Script..."
-                  value={googleScriptUrl}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setGoogleScriptUrl(val);
-                    try {
-                      localStorage.setItem('ugi_google_script_url', val);
-                    } catch {}
-                  }}
-                  className="flex-1 bg-white border border-emerald-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
-                />
-                <button
-                  type="button"
-                  onClick={guardarMotorEnSupabase}
-                  disabled={guardandoMotorGlobal}
-                  className="bg-emerald-700 disabled:bg-slate-300 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-800 whitespace-nowrap"
-                >
-                  {guardandoMotorGlobal ? 'Guardando...' : 'Guardar para Todos'}
-                </button>
-              </div>
-              {Object.keys(sheetUrlsPorDeporte).length > 0 && (
-                <div className="mt-2 pt-2 border-t border-emerald-200 flex flex-wrap gap-2">
-                  {Object.entries(sheetUrlsPorDeporte).map(([dep, url]) => (
+              <div className="flex flex-wrap gap-2">
+                {DEPORTES_OFICIALES.map((d) => {
+                  const url = sheetUrlsPorDeporte[d.nombre];
+                  return url ? (
                     <a
-                      key={dep}
+                      key={d.nombre}
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[11px] bg-white border border-emerald-300 text-emerald-800 px-2.5 py-1 rounded font-semibold hover:bg-emerald-100 flex items-center gap-1"
+                      className="text-[11px] bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg font-semibold hover:bg-emerald-800 flex items-center gap-1 shadow-xs"
                     >
-                      <ExternalLink size={11} /> {dep}
-                      {emailsPorDeporte[dep] ? ` (${emailsPorDeporte[dep]})` : ''}
+                      <ExternalLink size={11} /> {d.nombre}
                     </a>
-                  ))}
-                </div>
-              )}
+                  ) : (
+                    <button
+                      key={d.nombre}
+                      type="button"
+                      disabled={sincronizandoSheet}
+                      onClick={() => sincronizarGoogleSheetDeporte(d.nombre, false, true)}
+                      className="text-[11px] bg-white border border-emerald-300 text-emerald-800 px-2.5 py-1.5 rounded-lg font-semibold hover:bg-emerald-100 flex items-center gap-1"
+                    >
+                      <ExternalLink size={11} /> {d.nombre}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 
