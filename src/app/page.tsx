@@ -34,6 +34,22 @@ const CLAVE_ADMIN = 'ugi2026';
 const GOOGLE_SCRIPT_URL_FIJA =
   'https://script.google.com/macros/s/AKfycbwCqh1aY9nOkgp2getRYfkeg_zz7jis6gDf1SOUZyuD3UaJlsaRxRcsmsb_SCedQvY1/exec';
 
+// Links fijos a los Google Sheets por deporte creados en la cuenta de UGI (modo Solo Lectura)
+const SHEETS_POR_DEPORTE_FIJOS: Record<string, string> = {
+  'Colonia': 'https://docs.google.com/spreadsheets/d/1XVCzrTXXq7cpMSV15rVlx0O-uhFaOs2gS9KHgYCTGkc/edit',
+  'Hockey sobre Patines': 'https://docs.google.com/spreadsheets/d/109ntfFXi8DGTXwpZYchCkJ0ofc0abnr8qEMe1IFby8I/edit',
+  'Hockey sobre Césped': 'https://docs.google.com/spreadsheets/d/16vL1zIzeF4tWZkJe41QosvVNU8bJTVdM2m0a9qWs2bI/edit',
+  'Básquet': 'https://docs.google.com/spreadsheets/d/1JFm28VIHTcOWQ58ph2rKtpOnNeWA9LLr3RF8IKEBoFk/edit',
+  'Fútbol': 'https://docs.google.com/spreadsheets/d/1Jiva_ezTw2qlfTZCFo3XlMAcavWoAz5C7FVzJm987EE/edit',
+  'Vóley': 'https://docs.google.com/spreadsheets/d/1no8JOKm6HBdVbjALJL2zaRnSrXWH2O02O-ZPZrlU_kU/edit',
+  'Rugby': 'https://docs.google.com/spreadsheets/d/1XU-OgRu-KQX4prqhd0SFkKSm4Ib_dscf1ig1bQpsbGA/edit',
+  'Natación': 'https://docs.google.com/spreadsheets/d/1UPItmf59MxruW_BHHYosnZpcnHzhg6VcbSFSvIkTEDU/edit',
+  'Tenis': 'https://docs.google.com/spreadsheets/d/1ECprPSNP7HaI9xCt_PkL7tj99vMSqZYaX4V1h2W11SQ/edit',
+  'Handball': 'https://docs.google.com/spreadsheets/d/132KRNWOd5iY5OEwumbTPMAfVztlkFWEvUvGGMuSBSb8/edit',
+  'Gimnasia': 'https://docs.google.com/spreadsheets/d/1j8yYiHAGnLmA6vpm6E9NYXIRnTlt8sKq49eXWGi6A6E/edit',
+  'Patín Artístico': 'https://docs.google.com/spreadsheets/d/1V4-OO6UwvPYRPojcbIzRgn4fkFmSBc2yD-XynB4q-QM/edit',
+};
+
 // Lista oficial de Deportes definida por UGI (con PIN Profe y PIN Coordinador por defecto)
 const DEPORTES_OFICIALES = [
   { nombre: 'Colonia', tipo: 'colonia' as const, pinDefault: '1001', pinCoordDefault: '2001' },
@@ -102,7 +118,7 @@ export default function AsistenciaApp() {
   const [registrosAdmin, setRegistrosAdmin] = useState<any[]>([]);
   const [cargandoAdmin, setCargandoAdmin] = useState(false);
   const [googleScriptUrl, setGoogleScriptUrl] = useState(GOOGLE_SCRIPT_URL_FIJA);
-  const [sheetUrlsPorDeporte, setSheetUrlsPorDeporte] = useState<Record<string, string>>({});
+  const [sheetUrlsPorDeporte, setSheetUrlsPorDeporte] = useState<Record<string, string>>(SHEETS_POR_DEPORTE_FIJOS);
   const [emailsPorDeporte, setEmailsPorDeporte] = useState<Record<string, string>>({});
   const [sincronizandoSheet, setSincronizandoSheet] = useState(false);
   const [guardandoMotorGlobal, setGuardandoMotorGlobal] = useState(false);
