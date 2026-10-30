@@ -5,26 +5,17 @@
  * ¿CÓMO FUNCIONA?
  * 1. Crea 1 Google Sheet independiente por cada Deporte / Colonia dentro de la
  *    carpeta "UGI - Asistencias en Vivo" en TU cuenta de Google Drive.
- * 2. Si el deporte ingresó su mail de Google en la app, el script comparte esa
- *    planilla directamente con ese mail para que le aparezca en su propia
- *    cuenta de Google Drive ("Compartidos conmigo") y le avisa por correo.
+ * 2. Cada planilla queda configurada en modo SOLO LECTURA (View) para que
+ *    los profes y coordinadores de ese deporte puedan verla en vivo desde la app
+ *    sin poder borrar ni romper nada. Si querés darle permiso de edición a
+ *    alguien en particular, se lo das vos caso a caso desde el botón "Compartir"
+ *    de Google Sheets.
  * 3. Adentro del Sheet se carga TODO automáticamente cada vez que toman lista:
  *    - 1 pestaña por cada Categoría / Grupo con cada alumno, su % de asistencia,
  *      presentes, tardes, ausentes, cada fecha día por día y una fila final con
  *      el % de asistencia promedio de toda la categoría y el % de cada fecha.
  *    - 1 pestaña "Resumen por Categoría" con el % de asistencia de cada grupo.
  *    - 1 pestaña "Todos los Alumnos" con el padrón completo y sus porcentajes.
- *
- * PASOS PARA ACTIVARLO (1 sola vez):
- * 1. Entrá a https://script.google.com con tu cuenta (ugiccba@gmail.com).
- * 2. Creá un "Nuevo proyecto", borrá lo que haya y pegá TODO este código. Guardá (Ctrl+S).
- * 3. Tocá arriba a la derecha: "Implementar" -> "Nueva implementación".
- * 4. Tipo (ícono del engranaje): "Aplicación web"
- *    - Descripción: "Asistencias UGI"
- *    - Ejecutar como: "Yo" (tu cuenta)  <-- IMPORTANTE para que queden en tu Google Drive
- *    - Quién tiene acceso: "Cualquier persona"  <-- IMPORTANTE para que la app pueda enviar los datos
- * 5. Tocá "Implementar", autorizá los permisos y copiá la URL que termina en /exec.
- * 6. Pegala en la app (Panel Maestro o en cualquier deporte) y listo para siempre.
  * ============================================================================
  */
 
@@ -33,7 +24,7 @@ const NOMBRE_CARPETA_DRIVE = 'UGI - Asistencias en Vivo';
 function doGet() {
   return respuestaJSON({
     ok: true,
-    mensaje: 'Script de Asistencia UGI activo. Usá este link /exec en la app de asistencia.',
+    mensaje: 'Script de Asistencia UGI activo.',
   });
 }
 
@@ -44,14 +35,12 @@ function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents);
     const deporte = (payload.deporte || '').trim();
-    const email = (payload.email || '').trim().toLowerCase();
 
     if (!deporte) {
       return respuestaJSON({ ok: false, error: 'Falta el nombre del deporte' });
     }
 
-    const resultado = obtenerOCrearSheetDeporte(deporte, email);
-    const ss = resultado.ss;
+    const ss = obtenerOCrearSheetDeporte(deporte);
     const nombresHojasActivas = [];
 
     // 1. Pestaña "Resumen por Categoría" con % por categoría
@@ -82,7 +71,6 @@ function doPost(e) {
     return respuestaJSON({
       ok: true,
       deporte: deporte,
-      emailCompartido: resultado.emailCompartido,
       sheetUrl: ss.getUrl(),
       updatedAt: new Date().toISOString(),
     });
@@ -101,10 +89,9 @@ function obtenerOCrearCarpeta() {
   return DriveApp.createFolder(NOMBRE_CARPETA_DRIVE);
 }
 
-function obtenerOCrearSheetDeporte(deporte, email) {
+function obtenerOCrearSheetDeporte(deporte) {
   const props = PropertiesService.getScriptProperties();
   const propKey = 'SHEET_ID_' + deporte;
-  const propMailKey = 'SHEET_EMAIL_' + deporte;
   let idGuardado = props.getProperty(propKey);
   let ss = null;
 
@@ -128,29 +115,17 @@ function obtenerOCrearSheetDeporte(deporte, email) {
       ss = SpreadsheetApp.create(nombreArchivo);
       const archivoNuevo = DriveApp.getFileById(ss.getId());
       archivoNuevo.moveTo(carpeta);
-      archivoNuevo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     }
     props.setProperty(propKey, ss.getId());
   }
 
-  // Si ingresaron un mail para el deporte, lo sumamos al archivo para que aparezca en su cuenta
-  let emailCompartido = props.getProperty(propMailKey) || '';
-  if (email && email.indexOf('@') > 0) {
-    try {
-      const archivo = DriveApp.getFileById(ss.getId());
-      archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      if (email !== emailCompartido) {
-        ss.addEditor(email);
-        props.setProperty(propMailKey, email);
-        emailCompartido = email;
-      }
-    } catch (errMail) {
-      // Si el mail no tiene cuenta Google todavía, igual funciona con el link directo
-      emailCompartido = email;
-    }
-  }
+  // Asegurar siempre que el link sea de SOLO LECTURA (View) y vos manejás quién edita desde tu cuenta
+  try {
+    const archivo = DriveApp.getFileById(ss.getId());
+    archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (eShare) {}
 
-  return { ss: ss, emailCompartido: emailCompartido };
+  return ss;
 }
 
 function escribirTablaEnHoja(ss, nombreHoja, filasObjetos, resaltarUltimaFila) {

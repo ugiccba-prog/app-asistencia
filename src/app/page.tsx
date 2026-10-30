@@ -30,6 +30,9 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 // Contraseña para el Panel Maestro de UGI
 const CLAVE_ADMIN = 'ugi2026';
 
+// URL fija del Google Apps Script de UGI (si además la guardás en el Panel Maestro, queda en Supabase para todos los dispositivos)
+const GOOGLE_SCRIPT_URL_FIJA = '';
+
 // Lista oficial de Deportes definida por UGI (con PIN Profe y PIN Coordinador por defecto)
 const DEPORTES_OFICIALES = [
   { nombre: 'Colonia', tipo: 'colonia' as const, pinDefault: '1001', pinCoordDefault: '2001' },
@@ -97,11 +100,11 @@ export default function AsistenciaApp() {
   const [filtroDeporteAdmin, setFiltroDeporteAdmin] = useState<string>('TODOS');
   const [registrosAdmin, setRegistrosAdmin] = useState<any[]>([]);
   const [cargandoAdmin, setCargandoAdmin] = useState(false);
-  const [googleScriptUrl, setGoogleScriptUrl] = useState('');
+  const [googleScriptUrl, setGoogleScriptUrl] = useState(GOOGLE_SCRIPT_URL_FIJA);
   const [sheetUrlsPorDeporte, setSheetUrlsPorDeporte] = useState<Record<string, string>>({});
   const [emailsPorDeporte, setEmailsPorDeporte] = useState<Record<string, string>>({});
   const [sincronizandoSheet, setSincronizandoSheet] = useState(false);
-  const [mostrarConfigSheetProfe, setMostrarConfigSheetProfe] = useState(false);
+  const [guardandoMotorGlobal, setGuardandoMotorGlobal] = useState(false);
 
   // Estados Gestión de PINs por Deporte
   const [pinsDeportes, setPinsDeportes] = useState<Record<string, { pin: string; pinCoord: string }>>({});
@@ -511,13 +514,42 @@ export default function AsistenciaApp() {
     }
   };
 
+  // Guardar la URL /exec en Supabase para todas las disciplinas (así queda fija en todos los celulares y navegadores)
+  const guardarMotorEnSupabase = async () => {
+    const urlLimpia = googleScriptUrl.trim();
+    if (!urlLimpia) {
+      alert('Pegá primero la URL que termina en /exec');
+      return;
+    }
+    setGuardandoMotorGlobal(true);
+    try {
+      localStorage.setItem('ugi_google_script_url', urlLimpia);
+    } catch {}
+
+    const { error } = await supabase
+      .from('deportes_auth')
+      .update({ script_url: urlLimpia })
+      .neq('id', 0);
+
+    setGuardandoMotorGlobal(false);
+    if (error) {
+      alert('Error al guardar en Supabase: ' + error.message);
+    } else {
+      alert('¡Listo! El link /exec quedó guardado en la base de datos para todos los deportes y dispositivos.');
+    }
+  };
+
   // Crear o Actualizar en vivo el Google Sheet de un Deporte (organizado por Categoría y con Porcentajes)
-  const sincronizarGoogleSheetDeporte = async (nombreDeporte: string, mostrarAlerta = true) => {
-    const urlDestino = googleScriptUrl.trim();
+  const sincronizarGoogleSheetDeporte = async (
+    nombreDeporte: string,
+    mostrarAlerta = true,
+    abrirAlTerminar = false
+  ) => {
+    const urlDestino = (googleScriptUrl || GOOGLE_SCRIPT_URL_FIJA).trim();
     if (!urlDestino) {
-      if (mostrarAlerta) {
+      if (mostrarAlerta || abrirAlTerminar) {
         alert(
-          'Falta pegar la URL /exec del Google Apps Script (se configura una sola vez en el Panel Maestro o desplegando "Configuración técnica").'
+          'El administrador UGI aún no cargó el link /exec en el Panel Maestro.'
         );
       }
       return;
@@ -797,29 +829,32 @@ export default function AsistenciaApp() {
           return nuevo;
         });
 
-        // Guardamos el link y el mail en Supabase (compatible aunque email_sheet no exista aún)
-        const valorCombinado = emailDeporte
-          ? `${resJson.sheetUrl}|${emailDeporte}`
-          : resJson.sheetUrl;
+        // Guardamos el link del Sheet para este deporte y aseguramos que script_url quede en toda la tabla
         await supabase
           .from('deportes_auth')
-          .update({ sheet_url: valorCombinado, script_url: urlDestino })
+          .update({ sheet_url: resJson.sheetUrl, script_url: urlDestino })
           .eq('deporte', nombreDeporte);
 
-        if (mostrarAlerta) {
-          const msgMail = emailDeporte
-            ? `\nSe compartió con la cuenta: ${emailDeporte} (aparece en su Google Drive -> "Compartidos conmigo").`
-            : '';
-          alert(`¡Google Sheet de ${nombreDeporte} creado/actualizado con todas las categorías y porcentajes!${msgMail}`);
+        await supabase
+          .from('deportes_auth')
+          .update({ script_url: urlDestino })
+          .is('script_url', null);
+
+        if (abrirAlTerminar) {
+          window.open(resJson.sheetUrl, '_blank', 'noopener,noreferrer');
+        } else if (mostrarAlerta) {
+          alert(
+            `¡Google Sheet de ${nombreDeporte} actualizado con todas las categorías y porcentajes!`
+          );
         }
-      } else if (mostrarAlerta) {
+      } else if (mostrarAlerta || abrirAlTerminar) {
         alert(
           'El script respondió con un error: ' +
             (resJson?.error || 'Revisá que el script esté publicado como "Cualquier persona".')
         );
       }
     } catch {
-      if (mostrarAlerta) {
+      if (mostrarAlerta || abrirAlTerminar) {
         alert(
           'No se pudo conectar con el Google Apps Script. Verificá que la URL termine en /exec y que en "Quién tiene acceso" diga "Cualquier persona".'
         );
@@ -830,99 +865,58 @@ export default function AsistenciaApp() {
   };
 
   // ==========================================
-  // BLOQUE REUTILIZABLE: CONFIGURACIÓN DE GOOGLE SHEETS DEL DEPORTE
+  // BLOQUE REUTILIZABLE: ACCESO DIRECTO AL GOOGLE SHEET DEL DEPORTE (SIN CONFIGURACIONES)
   // ==========================================
   const renderTarjetaGoogleSheet = (deporteTarget: string) => {
     const urlSheet = sheetUrlsPorDeporte[deporteTarget];
-    const mailActual = emailsPorDeporte[deporteTarget] || '';
 
     return (
       <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 mb-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex-1 min-w-[200px]">
             <div className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-              📊 Google Sheets de {deporteTarget} (Por Categoría + % de Asistencia)
+              📊 Planilla Google Sheets de {deporteTarget} (En Vivo)
             </div>
-            <p className="text-[11px] text-emerald-800">
-              Poné el mail de Google de tu deporte para que la planilla quede en tu propia cuenta de Google Drive y se actualice sola al guardar asistencia.
+            <p className="text-[11px] text-emerald-800 mt-0.5">
+              Planilla oficial en modo <b>Solo Lectura</b> (se actualiza sola al guardar asistencia). Si requerís permiso de edición, solicitalo a UGI.
             </p>
           </div>
-          {urlSheet && (
-            <a
-              href={urlSheet}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-emerald-800 flex items-center gap-1.5 shadow-xs"
-            >
-              <ExternalLink size={14} /> Abrir Google Sheet
-            </a>
-          )}
-        </div>
 
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1">
-            <Mail
-              size={14}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-            <input
-              type="email"
-              placeholder={`Mail de Google de ${deporteTarget} (ej: coordinacion@gmail.com)`}
-              value={mailActual}
-              onChange={(e) => actualizarEmailDeporte(deporteTarget, e.target.value)}
-              className="w-full bg-white border border-emerald-300 rounded-lg pl-8 pr-2.5 py-2 text-xs text-slate-800"
-            />
+          <div className="flex items-center gap-2">
+            {urlSheet ? (
+              <>
+                <a
+                  href={urlSheet}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-emerald-700 text-white px-3.5 py-2 rounded-lg text-xs font-bold hover:bg-emerald-800 flex items-center gap-1.5 shadow-xs"
+                >
+                  <ExternalLink size={14} /> Abrir Google Sheet
+                </a>
+                <button
+                  type="button"
+                  onClick={() => sincronizarGoogleSheetDeporte(deporteTarget, true, false)}
+                  disabled={sincronizandoSheet}
+                  className="bg-white border border-emerald-300 text-emerald-800 px-2.5 py-2 rounded-lg text-xs font-semibold hover:bg-emerald-100 flex items-center gap-1"
+                  title="Refrescar datos de la planilla"
+                >
+                  <RefreshCw size={13} className={sincronizandoSheet ? 'animate-spin' : ''} />
+                  {sincronizandoSheet ? 'Actualizando...' : 'Actualizar'}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => sincronizarGoogleSheetDeporte(deporteTarget, false, true)}
+                disabled={sincronizandoSheet}
+                className="bg-emerald-700 disabled:bg-slate-300 text-white px-3.5 py-2 rounded-lg text-xs font-bold hover:bg-emerald-800 flex items-center gap-1.5 shadow-xs"
+              >
+                <ExternalLink size={14} />
+                {sincronizandoSheet ? 'Abriendo Google Sheet...' : 'Abrir Google Sheet'}
+              </button>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={() => sincronizarGoogleSheetDeporte(deporteTarget, true)}
-            disabled={sincronizandoSheet}
-            className="bg-emerald-600 disabled:bg-slate-300 text-white px-3.5 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700 flex items-center justify-center gap-1.5"
-          >
-            <RefreshCw size={13} className={sincronizandoSheet ? 'animate-spin' : ''} />
-            {sincronizandoSheet
-              ? 'Actualizando Sheet...'
-              : urlSheet
-              ? 'Actualizar y Compartir Sheet'
-              : 'Crear Google Sheet en mi cuenta'}
-          </button>
         </div>
-
-        {/* Configuración del link /exec (solo si aún no está cargado o quieren cambiarlo) */}
-        <div className="mt-2 pt-2 border-t border-emerald-200/70 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => setMostrarConfigSheetProfe(!mostrarConfigSheetProfe)}
-            className="text-[11px] text-emerald-800 hover:underline font-medium"
-          >
-            {googleScriptUrl
-              ? '✓ Motor de Google Sheets conectado (cambiar link /exec)'
-              : '⚙️ Configurar link /exec de Google Apps Script (1 sola vez)'}
-          </button>
-          {mailActual && urlSheet && (
-            <span className="text-[11px] text-emerald-800 font-medium">
-              Vinculado a: <b>{mailActual}</b>
-            </span>
-          )}
-        </div>
-
-        {(!googleScriptUrl || mostrarConfigSheetProfe) && (
-          <div className="mt-2">
-            <input
-              type="url"
-              placeholder="Pegá acá la URL que termina en /exec de Google Apps Script..."
-              value={googleScriptUrl}
-              onChange={(e) => {
-                const val = e.target.value;
-                setGoogleScriptUrl(val);
-                try {
-                  localStorage.setItem('ugi_google_script_url', val);
-                } catch {}
-              }}
-              className="w-full bg-white border border-emerald-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
-            />
-          </div>
-        )}
       </div>
     );
   };
@@ -1141,10 +1135,10 @@ export default function AsistenciaApp() {
           ) : (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 mb-5">
               <div className="text-xs font-bold text-emerald-950 mb-1">
-                📊 Google Sheets Activos por Deporte
+                📊 Motor de Google Sheets (En tu cuenta de Google Drive)
               </div>
               <p className="text-[11px] text-emerald-800 mb-2">
-                Elegí un deporte arriba para asignarle su mail y crear/actualizar su Google Sheet, o abrí cualquiera de los ya creados:
+                Pegá acá tu URL <code>/exec</code> y tocá <b>&quot;Guardar para Todos&quot;</b> así queda grabada en la base de datos para todos los celulares y navegadores:
               </p>
               <div className="flex flex-col sm:flex-row gap-2 mb-2">
                 <input
@@ -1160,6 +1154,14 @@ export default function AsistenciaApp() {
                   }}
                   className="flex-1 bg-white border border-emerald-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
                 />
+                <button
+                  type="button"
+                  onClick={guardarMotorEnSupabase}
+                  disabled={guardandoMotorGlobal}
+                  className="bg-emerald-700 disabled:bg-slate-300 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-800 whitespace-nowrap"
+                >
+                  {guardandoMotorGlobal ? 'Guardando...' : 'Guardar para Todos'}
+                </button>
               </div>
               {Object.keys(sheetUrlsPorDeporte).length > 0 && (
                 <div className="mt-2 pt-2 border-t border-emerald-200 flex flex-wrap gap-2">
