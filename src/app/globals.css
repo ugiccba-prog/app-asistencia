@@ -1,26 +1,560 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --navy: #0b2545;
+  --blue: #1e3a8a;
+  --sky: #2b83c6;
+  --sky-light: #e0f2fe;
+  --sky-border: #bae6fd;
+  --ok: #15803d;
+  --ok-soft: #dcfce7;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --bad: #dc2626;
+  --bad-soft: #fee2e2;
+  --bg: #f1f5f9;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #cbd5e1;
+  --white: #ffffff;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.45;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--sky);
+  outline-offset: 2px;
+}
+
+/* ================= LOGIN CON ESCUDO C.C.B.A. ================= */
+.ugi-login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px;
+  background: radial-gradient(circle at top, #1e3a8a 0%, #0b2545 55%, #061529 100%);
+}
+
+.ugi-login-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--white);
+  border-radius: 24px;
+  padding: 28px 24px 26px;
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  text-align: center;
+}
+
+.ugi-login-shield {
+  width: 86px;
+  height: 102px;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 12px rgba(11, 37, 69, 0.22));
+  margin: 0 auto 10px;
+  display: block;
+}
+
+.ugi-login-pill {
+  display: inline-block;
+  background: var(--sky-light);
+  color: var(--blue);
+  border: 1px solid var(--sky-border);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+
+.ugi-login-card h1 {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: -0.3px;
+}
+
+.ugi-login-sub {
+  font-size: 0.84rem;
+  color: var(--muted);
+  margin-top: 3px;
+  margin-bottom: 20px;
+}
+
+/* ================= CABECERA PRINCIPAL ================= */
+.ugi-header {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%);
+  color: var(--white);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: 0 4px 14px rgba(11, 37, 69, 0.18);
+}
+
+.ugi-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.ugi-brand img {
+  width: 38px;
+  height: 44px;
+  object-fit: contain;
+  background: var(--white);
+  padding: 3px;
+  border-radius: 9px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+}
+
+.ugi-brand h1 {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  line-height: 1.2;
+}
+
+.ugi-brand small {
+  display: block;
+  font-size: 0.75rem;
+  color: #bae6fd;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.ugi-btn-salir {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: var(--white);
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.ugi-btn-salir:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.ugi-estado {
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  background: var(--white);
+  border-bottom: 1px solid #e2e8f0;
+  color: var(--muted);
+}
+
+/* ================= TARJETAS Y CONTROLES ================= */
+.ugi-container {
+  max-width: 720px;
+  width: 100%;
+  margin: 14px auto;
+  padding: 0 12px 84px;
+}
+
+.ugi-card {
+  background: var(--white);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+  border: 1px solid #e2e8f0;
+  margin-bottom: 14px;
+}
+
+.ugi-card h3 {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: var(--navy);
+  margin-bottom: 4px;
+}
+
+.ugi-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.ugi-label {
+  display: block;
+  font-size: 0.73rem;
+  font-weight: 800;
+  color: #475569;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  text-align: left;
+}
+
+.ugi-input,
+.ugi-select,
+.ugi-textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 13px;
+  border: 1.5px solid var(--border);
+  border-radius: 11px;
+  font-size: 1rem;
+  font-weight: 500;
+  background: #f8fafc;
+  color: var(--text);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.ugi-input:focus,
+.ugi-select:focus,
+.ugi-textarea:focus {
+  background: var(--white);
+  border-color: var(--sky);
+}
+
+.ugi-textarea {
+  min-height: 130px;
+  resize: vertical;
+}
+
+.ugi-btn {
+  width: 100%;
+  min-height: 50px;
+  background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%);
+  color: var(--white);
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.96rem;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(11, 37, 69, 0.2);
+  transition: transform 0.1s, opacity 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+}
+
+.ugi-btn:active {
+  transform: scale(0.99);
+  opacity: 0.92;
+}
+
+.ugi-btn:disabled {
+  background: #94a3b8;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.ugi-btn.ok {
+  background: linear-gradient(135deg, #15803d 0%, #16a34a 100%);
+  box-shadow: 0 4px 12px rgba(21, 128, 61, 0.25);
+}
+
+.ugi-btn-sec {
+  min-height: 40px;
+  background: var(--sky-light);
+  color: var(--blue);
+  border: 1px solid var(--sky-border);
+  padding: 8px 13px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.15s;
+}
+
+.ugi-btn-sec:hover {
+  background: #bae6fd;
+}
+
+/* ================= PESTAÑAS ================= */
+.ugi-tabs {
+  display: grid;
+  gap: 6px;
+  background: #e2e8f0;
+  padding: 5px;
+  border-radius: 14px;
+  margin-bottom: 14px;
+}
+
+.ugi-tab {
+  min-height: 42px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.83rem;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.ugi-tab[aria-selected="true"] {
+  background: var(--white);
+  color: var(--navy);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
+}
+
+/* ================= FILAS DE ASISTENCIA (P / A / T + COMIDA) ================= */
+.ugi-asist-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.ugi-asist-row:last-of-type {
+  border-bottom: none;
+}
+
+.ugi-pat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ugi-pat-btn {
+  width: 46px;
+  min-height: 44px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 0.9rem;
+  cursor: pointer;
+  background: #f8fafc;
+  color: #334155;
+  transition: all 0.12s;
+}
+
+.ugi-pat-btn[aria-pressed="true"][data-e="presente"] {
+  background: var(--ok);
+  color: var(--white);
+  border-color: var(--ok);
+  box-shadow: 0 2px 6px rgba(21, 128, 61, 0.25);
+}
+
+.ugi-pat-btn[aria-pressed="true"][data-e="ausente"] {
+  background: var(--bad);
+  color: var(--white);
+  border-color: var(--bad);
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.25);
+}
+
+.ugi-pat-btn[aria-pressed="true"][data-e="tarde"] {
+  background: var(--warn);
+  color: var(--white);
+  border-color: var(--warn);
+  box-shadow: 0 2px 6px rgba(180, 83, 9, 0.25);
+}
+
+.ugi-comida-btn {
+  min-height: 44px;
+  padding: 0 11px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 0.76rem;
+  cursor: pointer;
+  background: #f8fafc;
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.ugi-comida-btn[aria-pressed="true"] {
+  background: #ea580c;
+  color: var(--white);
+  border-color: #c2410c;
+  box-shadow: 0 2px 6px rgba(234, 88, 12, 0.28);
+}
+
+/* ================= KPIs Y PILLS ================= */
+.ugi-kpi {
+  background: var(--white);
+  border-radius: 14px;
+  padding: 14px 8px;
+  text-align: center;
+  border: 1px solid #e2e8f0;
+  border-top: 4px solid var(--navy);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.ugi-kpi.kpi-ok {
+  border-top-color: var(--ok);
+}
+
+.ugi-kpi.kpi-warn {
+  border-top-color: var(--warn);
+}
+
+.ugi-kpi.kpi-bad {
+  border-top-color: var(--bad);
+}
+
+.ugi-kpi b {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--navy);
+  margin: 2px 0;
+}
+
+.ugi-kpi.kpi-ok b {
+  color: var(--ok);
+}
+
+.ugi-kpi.kpi-warn b {
+  color: var(--warn);
+}
+
+.ugi-kpi.kpi-bad b {
+  color: var(--bad);
+}
+
+.ugi-kpi span {
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.ugi-pill {
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ugi-pill.v {
+  background: var(--ok-soft);
+  color: #166534;
+}
+
+.ugi-pill.a {
+  background: var(--warn-soft);
+  color: #92400e;
+}
+
+.ugi-pill.r {
+  background: var(--bad-soft);
+  color: #991b1b;
+}
+
+.ugi-quitar {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: var(--bad);
+  border-radius: 8px;
+  padding: 6px 11px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ugi-quitar:hover {
+  background: #ffe4e6;
+}
+
+/* ================= TABLA RESPONSIVA CON ENCABEZADO STICKY ================= */
+.ugi-table-wrapper {
+  overflow: auto;
+  max-inline-size: 100%;
+  max-block-size: min(520px, 75vh);
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.ugi-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.84rem;
+}
+
+.ugi-table thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  background: #f8fafc;
+}
+
+.ugi-table th,
+.ugi-table td {
+  text-align: left;
+  padding: 10px 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ugi-table th {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.ugi-toast {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--navy);
+  color: var(--white);
+  padding: 12px 22px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  z-index: 100;
+  max-width: 92vw;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(11, 37, 69, 0.35);
 }

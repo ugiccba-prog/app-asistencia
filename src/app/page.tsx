@@ -1,70 +1,66 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import * as XLSX from 'xlsx';
 import {
-  CheckCircle,
-  Clock,
-  XCircle,
   Utensils,
   Plus,
   Edit2,
   UserPlus,
   Trash2,
-  ShieldAlert,
-  ArrowLeft,
-  Lock,
-  Users,
-  CheckCircle2,
-  Mail,
   ExternalLink,
   RefreshCw,
   Key,
+  Upload,
+  FileSpreadsheet,
+  Download,
+  Eye,
+  EyeOff,
+  Check,
+  Search,
+  ClipboardList,
+  BarChart3,
 } from 'lucide-react';
 
-// Conexión a Supabase
+// ============================================================================
+// 1. CONEXIÓN A SUPABASE Y CONFIGURACIÓN OFICIAL (SOLO COLONIA Y COYFD)
+// ============================================================================
 const supabaseUrl = 'https://eohxmexldfjfkjdymwlm.supabase.co';
 const supabaseAnonKey = 'sb_publishable_mtZs0Bn0FXsY57jHiGdFbQ_z1R03p2L';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Contraseña para el Panel Maestro de UGI
+// Contraseña Maestra para Dirección UGI
 const CLAVE_ADMIN = 'ugi2026';
 
-// URL fija del Google Apps Script de UGI (conectada directamente a la cuenta de Google Drive de UGI)
+// URL fija del Google Apps Script exclusivo para Colonia y COYFD
 const GOOGLE_SCRIPT_URL_FIJA =
-  'https://script.google.com/macros/s/AKfycbwCqh1aY9nOkgp2getRYfkeg_zz7jis6gDf1SOUZyuD3UaJlsaRxRcsmsb_SCedQvY1/exec';
+  'https://script.google.com/macros/s/AKfycbyocT7bZHmz4Fnd9vEwG7LBjPnheKNfoVM3Iqg0-lcaic65CfjE9tI5Y2Y3hD7D9uCm/exec';
 
-// Links fijos a los Google Sheets por deporte creados en la cuenta de UGI (modo Solo Lectura)
-const SHEETS_POR_DEPORTE_FIJOS: Record<string, string> = {
-  'Colonia': 'https://docs.google.com/spreadsheets/d/1XVCzrTXXq7cpMSV15rVlx0O-uhFaOs2gS9KHgYCTGkc/edit',
-  'Hockey sobre Patines': 'https://docs.google.com/spreadsheets/d/109ntfFXi8DGTXwpZYchCkJ0ofc0abnr8qEMe1IFby8I/edit',
-  'Hockey sobre Césped': 'https://docs.google.com/spreadsheets/d/16vL1zIzeF4tWZkJe41QosvVNU8bJTVdM2m0a9qWs2bI/edit',
-  'Básquet': 'https://docs.google.com/spreadsheets/d/1JFm28VIHTcOWQ58ph2rKtpOnNeWA9LLr3RF8IKEBoFk/edit',
-  'Fútbol': 'https://docs.google.com/spreadsheets/d/1Jiva_ezTw2qlfTZCFo3XlMAcavWoAz5C7FVzJm987EE/edit',
-  'Vóley': 'https://docs.google.com/spreadsheets/d/1no8JOKm6HBdVbjALJL2zaRnSrXWH2O02O-ZPZrlU_kU/edit',
-  'Rugby': 'https://docs.google.com/spreadsheets/d/1XU-OgRu-KQX4prqhd0SFkKSm4Ib_dscf1ig1bQpsbGA/edit',
-  'Natación': 'https://docs.google.com/spreadsheets/d/1UPItmf59MxruW_BHHYosnZpcnHzhg6VcbSFSvIkTEDU/edit',
-  'Tenis': 'https://docs.google.com/spreadsheets/d/1ECprPSNP7HaI9xCt_PkL7tj99vMSqZYaX4V1h2W11SQ/edit',
-  'Handball': 'https://docs.google.com/spreadsheets/d/132KRNWOd5iY5OEwumbTPMAfVztlkFWEvUvGGMuSBSb8/edit',
-  'Gimnasia': 'https://docs.google.com/spreadsheets/d/1j8yYiHAGnLmA6vpm6E9NYXIRnTlt8sKq49eXWGi6A6E/edit',
-  'Patín Artístico': 'https://docs.google.com/spreadsheets/d/1V4-OO6UwvPYRPojcbIzRgn4fkFmSBc2yD-XynB4q-QM/edit',
+const SHEETS_POR_AREA_FIJOS: Record<string, string> = {
+  Colonia: '',
+  COYFD: '',
 };
 
-// Lista oficial de Deportes definida por UGI (con PIN Profe y PIN Coordinador por defecto)
+// Configuración exclusiva para Colonia (con opción de comida siempre) y COYFD (sin comida)
 const DEPORTES_OFICIALES = [
-  { nombre: 'Colonia', tipo: 'colonia' as const, pinDefault: '1001', pinCoordDefault: '2001' },
-  { nombre: 'Hockey sobre Patines', tipo: 'deporte' as const, pinDefault: '1002', pinCoordDefault: '2002' },
-  { nombre: 'Hockey sobre Césped', tipo: 'deporte' as const, pinDefault: '1003', pinCoordDefault: '2003' },
-  { nombre: 'Básquet', tipo: 'deporte' as const, pinDefault: '1004', pinCoordDefault: '2004' },
-  { nombre: 'Fútbol', tipo: 'deporte' as const, pinDefault: '1005', pinCoordDefault: '2005' },
-  { nombre: 'Vóley', tipo: 'deporte' as const, pinDefault: '1006', pinCoordDefault: '2006' },
-  { nombre: 'Rugby', tipo: 'deporte' as const, pinDefault: '1007', pinCoordDefault: '2007' },
-  { nombre: 'Natación', tipo: 'deporte' as const, pinDefault: '1008', pinCoordDefault: '2008' },
-  { nombre: 'Tenis', tipo: 'deporte' as const, pinDefault: '1009', pinCoordDefault: '2009' },
-  { nombre: 'Handball', tipo: 'deporte' as const, pinDefault: '1010', pinCoordDefault: '2010' },
-  { nombre: 'Gimnasia', tipo: 'deporte' as const, pinDefault: '1011', pinCoordDefault: '2011' },
-  { nombre: 'Patín Artístico', tipo: 'deporte' as const, pinDefault: '1012', pinCoordDefault: '2012' },
+  {
+    nombre: 'Colonia',
+    tipo: 'colonia' as const,
+    tieneComida: true,
+    pinDefault: '1001',
+    pinCoordDefault: '2001',
+  },
+  {
+    nombre: 'COYFD',
+    tipo: 'deporte' as const,
+    tieneComida: false,
+    pinDefault: '1002',
+    pinCoordDefault: '2002',
+  },
 ];
+
+const tieneOpcionComida = (nombreArea: string): boolean => nombreArea === 'Colonia';
 
 interface Grupo {
   id: number;
@@ -78,6 +74,7 @@ interface Alumno {
   grupo_id: number;
   nombre: string;
   apellido: string;
+  activo?: boolean;
 }
 
 interface AsistenciaState {
@@ -85,174 +82,264 @@ interface AsistenciaState {
   almuerzo: boolean;
 }
 
-export default function AsistenciaApp() {
-  // Control de Vista: Login Deporte vs Profes vs Coordinador vs Admin
-  const [vista, setVista] = useState<'login_deporte' | 'profe' | 'coordinador' | 'login_admin' | 'admin'>('login_deporte');
-  const [esCoordinador, setEsCoordinador] = useState(false);
-  const [filtroCategoriaCoord, setFiltroCategoriaCoord] = useState<string>('TODAS');
-  const [inputClave, setInputClave] = useState('');
+interface AlumnoImportado {
+  grupo: string;
+  apellido: string;
+  nombre: string;
+}
+
+type RolSesion = 'profe' | 'coordinador' | 'admin';
+type TabActiva = 'asistencia' | 'analisis' | 'padron' | 'config';
+
+// Limpia viñetas, numeración y separa "Apellido, Nombre" o "Nombre Apellido"
+function parsearLineaAlumno(lineaRaw: string): { apellido: string; nombre: string } | null {
+  const limpia = lineaRaw
+    .replace(/^\s*(\d+\s*[.)\-:]\s*|[-•*·]\s*)/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!limpia) return null;
+
+  // Si viene separado por tabulación (copiado de 2 columnas de Excel)
+  if (lineaRaw.includes('\t')) {
+    const cols = lineaRaw
+      .split('\t')
+      .map((c) => c.trim())
+      .filter(Boolean);
+    if (cols.length >= 2) {
+      const col0 = cols[0].replace(/^\s*\d+\s*[.)\-:]?\s*/, '').trim();
+      const col1 = cols[1].trim();
+      if (/^(apellido|nombre|alumno|jugador|legajo|dni|n[°º])$/i.test(col0)) return null;
+      return { apellido: col0, nombre: col1 };
+    }
+  }
+
+  // Formato "Apellido, Nombre" o "Apellido; Nombre"
+  if (limpia.includes(',') || limpia.includes(';')) {
+    const sep = limpia.includes(',') ? ',' : ';';
+    const partes = limpia.split(sep).map((p) => p.trim()).filter(Boolean);
+    if (partes.length >= 2) {
+      if (/^(apellido|nombre|alumno)$/i.test(partes[0])) return null;
+      return { apellido: partes[0], nombre: partes.slice(1).join(' ') };
+    }
+  }
+
+  // Formato sin coma: "Apellido Nombre" (si son 2+ palabras, tomamos la primera como Apellido y el resto como Nombre)
+  const palabras = limpia.split(' ').filter(Boolean);
+  if (palabras.length === 1) {
+    if (/^(apellido|nombre|alumno|lista|grupo)$/i.test(palabras[0])) return null;
+    return { apellido: palabras[0], nombre: '-' };
+  }
+  const apellido = palabras[0];
+  const nombre = palabras.slice(1).join(' ');
+  if (/^(apellido|nombre)$/i.test(apellido) && /^(apellido|nombre)$/i.test(nombre)) return null;
+  return { apellido, nombre };
+}
+
+export default function AsistenciaColoniaCoyfdApp() {
+  // Sesión y navegación estilo Deportes UGI
+  const [logueado, setLogueado] = useState(false);
+  const [rolSesion, setRolSesion] = useState<RolSesion>('profe');
+  const [areaLogin, setAreaLogin] = useState<string>('Colonia');
+  const [deporteSeleccionado, setDeporteSeleccionado] = useState<string>('Colonia');
+  const [tabActiva, setTabActiva] = useState<TabActiva>('asistencia');
+
+  // Login states
   const [inputPinDeporte, setInputPinDeporte] = useState('');
+  const [mostrarPasswordLogin, setMostrarPasswordLogin] = useState(false);
+  const [loginError, setLoginError] = useState('');
   const [validandoPin, setValidandoPin] = useState(false);
 
-  // Estados Vista Profe
-  const [deporteSeleccionado, setDeporteSeleccionado] = useState<string>(DEPORTES_OFICIALES[0].nombre);
+  // Toast de notificación estilo Deportes UGI
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mostrarToast = (msg: string) => {
+    setToastMsg(msg);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMsg(null), 2800);
+  };
+
+  // Grupos y Alumnos
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [grupoSeleccionado, setGrupoSeleccionado] = useState<number | null>(null);
-
   const [modoCategoria, setModoCategoria] = useState<'ninguno' | 'crear' | 'editar'>('ninguno');
   const [inputCategoria, setInputCategoria] = useState('');
 
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
+  const [busquedaAlumno, setBusquedaAlumno] = useState('');
   const [nuevoApellido, setNuevoApellido] = useState('');
   const [nuevoNombre, setNuevoNombre] = useState('');
-  const [mostrarFormAlumno, setMostrarFormAlumno] = useState(false);
 
-  const [asistencias, setAsistencias] = useState<{ [key: number]: AsistenciaState }>({});
+  // Asistencia diaria
+  const [asistencias, setAsistencias] = useState<Record<number, AsistenciaState>>({});
   const [fecha, setFecha] = useState<string>('');
   const [cargando, setCargando] = useState(false);
+  const [estadoConexion, setEstadoConexion] = useState<'ok' | 'warn'>('ok');
 
-  // Estados Google Sheets por Deporte (con mail propio de cada deporte)
+  // Carga ágil de listados (Padrón: Texto / WhatsApp + Archivo Excel / CSV)
+  const [padronCategoriaInput, setPadronCategoriaInput] = useState('');
+  const [padronTextoMasivo, setPadronTextoMasivo] = useState('');
+  const [cargandoMasivo, setCargandoMasivo] = useState(false);
+
+  // Estado para subida de archivo Excel / CSV
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [archivoNombre, setArchivoNombre] = useState('');
+  const [alumnosExcelPreview, setAlumnosExcelPreview] = useState<AlumnoImportado[]>([]);
+  const [modoImportExcel, setModoImportExcel] = useState<'grupo_actual' | 'por_columna_o_hoja'>('grupo_actual');
+  const [grupoDestinoExcel, setGrupoDestinoExcel] = useState('');
+
+  // Estados de Análisis, Coordinación y Google Sheets
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
-  const [filtroDeporteAdmin, setFiltroDeporteAdmin] = useState<string>('TODOS');
+  const [filtroAreaAnalisis, setFiltroAreaAnalisis] = useState<string>('ACTUAL');
+  const [filtroCategoriaCoord, setFiltroCategoriaCoord] = useState<string>('TODAS');
   const [registrosAdmin, setRegistrosAdmin] = useState<any[]>([]);
+  const [alumnosAreaCompleta, setAlumnosAreaCompleta] = useState<Alumno[]>([]);
   const [cargandoAdmin, setCargandoAdmin] = useState(false);
+
   const [googleScriptUrl, setGoogleScriptUrl] = useState(GOOGLE_SCRIPT_URL_FIJA);
-  const [sheetUrlsPorDeporte, setSheetUrlsPorDeporte] = useState<Record<string, string>>(SHEETS_POR_DEPORTE_FIJOS);
+  const [sheetUrlsPorDeporte, setSheetUrlsPorDeporte] =
+    useState<Record<string, string>>(SHEETS_POR_AREA_FIJOS);
   const [emailsPorDeporte, setEmailsPorDeporte] = useState<Record<string, string>>({});
   const [sincronizandoSheet, setSincronizandoSheet] = useState(false);
   const [guardandoMotorGlobal, setGuardandoMotorGlobal] = useState(false);
 
-  // Estados Gestión de PINs por Deporte
-  const [pinsDeportes, setPinsDeportes] = useState<Record<string, { pin: string; pinCoord: string }>>({});
-  const [mostrarPinsAdmin, setMostrarPinsAdmin] = useState(false);
+  // Gestión de Contraseñas (Profe y Coordinación para Colonia y COYFD)
+  const [pinsDeportes, setPinsDeportes] = useState<
+    Record<string, { pin: string; pinCoord: string }>
+  >({});
   const [deporteEditandoPin, setDeporteEditandoPin] = useState<string | null>(null);
   const [inputEditPinProfe, setInputEditPinProfe] = useState('');
   const [inputEditPinCoord, setInputEditPinCoord] = useState('');
 
-  // Fecha de hoy (local) y sesión guardada en el celular (localStorage)
+  // ============================================================================
+  // 2. INICIALIZACIÓN Y SESIÓN GUARDADA
+  // ============================================================================
   useEffect(() => {
     const d = new Date();
-    const hoy = [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+    const hoy = [
+      d.getFullYear(),
+      String(d.getMonth() + 1).padStart(2, '0'),
+      String(d.getDate()).padStart(2, '0'),
+    ].join('-');
+
+    const hace30 = new Date();
+    hace30.setDate(hace30.getDate() - 30);
+    const desde30 = [
+      hace30.getFullYear(),
+      String(hace30.getMonth() + 1).padStart(2, '0'),
+      String(hace30.getDate()).padStart(2, '0'),
+    ].join('-');
+
     setFecha(hoy);
-    setFechaDesde(hoy);
+    setFechaDesde(desde30);
     setFechaHasta(hoy);
 
     try {
-      const urlGuardada = localStorage.getItem('ugi_google_script_url');
-      if (urlGuardada) setGoogleScriptUrl(urlGuardada);
-      const sheetsGuardados = localStorage.getItem('ugi_sheet_urls');
+      const sheetsGuardados = localStorage.getItem('ugi_sheet_urls_colonia_coyfd_v2');
       if (sheetsGuardados) setSheetUrlsPorDeporte(JSON.parse(sheetsGuardados));
-      const mailsGuardados = localStorage.getItem('ugi_sheet_emails');
+      const mailsGuardados = localStorage.getItem('ugi_sheet_emails_colonia_coyfd_v2');
       if (mailsGuardados) setEmailsPorDeporte(JSON.parse(mailsGuardados));
 
       const deporteGuardado = localStorage.getItem('ugi_deporte_logueado');
-      const rolGuardado = localStorage.getItem('ugi_rol_logueado');
-      if (deporteGuardado && DEPORTES_OFICIALES.some((dep) => dep.nombre === deporteGuardado)) {
-        setDeporteSeleccionado(deporteGuardado);
-        if (rolGuardado === 'coordinador') {
-          setEsCoordinador(true);
-          setVista('coordinador');
-        } else {
-          setEsCoordinador(false);
-          setVista('profe');
+      const rolGuardado = localStorage.getItem('ugi_rol_logueado') as RolSesion | null;
+      if (
+        deporteGuardado &&
+        (DEPORTES_OFICIALES.some((dep) => dep.nombre === deporteGuardado) ||
+          deporteGuardado === 'TODOS')
+      ) {
+        const areaReal = deporteGuardado === 'TODOS' ? 'Colonia' : deporteGuardado;
+        setAreaLogin(deporteGuardado);
+        setDeporteSeleccionado(areaReal);
+        if (rolGuardado === 'admin' || deporteGuardado === 'TODOS') {
+          setRolSesion('admin');
+          setFiltroAreaAnalisis('TODOS');
+          setLogueado(true);
+        } else if (rolGuardado === 'coordinador') {
+          setRolSesion('coordinador');
+          setFiltroAreaAnalisis('ACTUAL');
+          setLogueado(true);
+        } else if (rolGuardado === 'profe') {
+          setRolSesion('profe');
+          setLogueado(true);
         }
       }
     } catch {
       // Ignorar si localStorage no está disponible
     }
 
-    // Traer URLs, Mails y PINs de deportes_auth en Supabase
-    supabase
-      .from('deportes_auth')
-      .select('*')
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          const mapaUrls: Record<string, string> = {};
-          const mapaMails: Record<string, string> = {};
-          const mapaPins: Record<string, { pin: string; pinCoord: string }> = {};
-          let scriptRemoto = '';
-          data.forEach((row: any) => {
-            if (row.deporte) {
-              mapaPins[row.deporte] = {
-                pin: row.pin ? String(row.pin).trim() : '',
-                pinCoord: row.pin_coord ? String(row.pin_coord).trim() : '',
-              };
-            }
-            if (row.deporte && row.sheet_url) {
-              const partes = String(row.sheet_url).split('|');
-              mapaUrls[row.deporte] = partes[0];
-              if (partes[1]) mapaMails[row.deporte] = partes[1];
-            }
-            if (row.deporte && row.email_sheet) {
-              mapaMails[row.deporte] = row.email_sheet;
-            }
-            if (row.script_url) scriptRemoto = row.script_url;
-          });
-          setPinsDeportes(mapaPins);
-          if (Object.keys(mapaUrls).length > 0) {
-            setSheetUrlsPorDeporte((prev) => ({ ...prev, ...mapaUrls }));
-          }
-          if (Object.keys(mapaMails).length > 0) {
-            setEmailsPorDeporte((prev) => ({ ...prev, ...mapaMails }));
-          }
-          if (scriptRemoto) {
-            setGoogleScriptUrl(scriptRemoto);
-          }
-        }
-      });
+    cargarConfigAuthSupabase();
   }, []);
 
-  const guardarPinsAdmin = async (deporte: string) => {
-    const nuevoProfe = inputEditPinProfe.trim();
-    const nuevoCoord = inputEditPinCoord.trim();
-    if (!nuevoProfe || !nuevoCoord) {
-      alert('Completá ambos PINs');
-      return;
-    }
-    const { error } = await supabase
+  const cargarConfigAuthSupabase = async () => {
+    const nombresPermitidos = DEPORTES_OFICIALES.map((d) => d.nombre);
+    const { data, error } = await supabase
       .from('deportes_auth')
-      .upsert(
-        {
-          deporte,
-          pin: nuevoProfe,
-          pin_coord: nuevoCoord,
-        },
-        { onConflict: 'deporte' }
-      );
+      .select('*')
+      .in('deporte', nombresPermitidos);
 
     if (error) {
-      alert('Error al guardar PINs: ' + error.message);
-    } else {
-      setPinsDeportes((prev) => ({
-        ...prev,
-        [deporte]: { pin: nuevoProfe, pinCoord: nuevoCoord },
-      }));
-      setDeporteEditandoPin(null);
-      alert(`PINs de ${deporte} actualizados correctamente.`);
+      setEstadoConexion('warn');
+      return;
+    }
+
+    setEstadoConexion('ok');
+    if (data && data.length > 0) {
+      const mapaUrls: Record<string, string> = {};
+      const mapaMails: Record<string, string> = {};
+      const mapaPins: Record<string, { pin: string; pinCoord: string }> = {};
+      data.forEach((row: any) => {
+        if (row.deporte) {
+          mapaPins[row.deporte] = {
+            pin: row.pin ? String(row.pin).trim() : '',
+            pinCoord: row.pin_coord ? String(row.pin_coord).trim() : '',
+          };
+        }
+        if (row.deporte && row.sheet_url && row.script_url === GOOGLE_SCRIPT_URL_FIJA) {
+          const partes = String(row.sheet_url).split('|');
+          mapaUrls[row.deporte] = partes[0];
+          if (partes[1]) mapaMails[row.deporte] = partes[1];
+        }
+        if (row.deporte && row.email_sheet) {
+          mapaMails[row.deporte] = row.email_sheet;
+        }
+      });
+      setPinsDeportes(mapaPins);
+      if (Object.keys(mapaUrls).length > 0) {
+        setSheetUrlsPorDeporte((prev) => ({ ...prev, ...mapaUrls }));
+      }
+      if (Object.keys(mapaMails).length > 0) {
+        setEmailsPorDeporte((prev) => ({ ...prev, ...mapaMails }));
+      }
     }
   };
 
-  const actualizarEmailDeporte = (deporte: string, nuevoMail: string) => {
-    setEmailsPorDeporte((prev) => {
-      const nuevo = { ...prev, [deporte]: nuevoMail };
-      try {
-        localStorage.setItem('ugi_sheet_emails', JSON.stringify(nuevo));
-      } catch {}
-      return nuevo;
-    });
-  };
-
-  // Cargar grupos
+  // ============================================================================
+  // 3. CARGA DE GRUPOS, ALUMNOS Y ASISTENCIAS
+  // ============================================================================
   const cargarGrupos = async (deporteActual: string, idSeleccionar?: number) => {
-    const { data } = await supabase.from('grupos').select('*').order('categoria');
+    const nombresPermitidos = DEPORTES_OFICIALES.map((d) => d.nombre);
+    const { data, error } = await supabase
+      .from('grupos')
+      .select('*')
+      .in('nombre', nombresPermitidos)
+      .order('categoria');
+
+    if (error) {
+      setEstadoConexion('warn');
+      return;
+    }
+
+    setEstadoConexion('ok');
     if (data) {
       setGrupos(data);
       const filtrados = data.filter((g) => g.nombre === deporteActual);
-      if (idSeleccionar) {
+      if (idSeleccionar && filtrados.some((g) => g.id === idSeleccionar)) {
         setGrupoSeleccionado(idSeleccionar);
       } else if (filtrados.length > 0) {
-        setGrupoSeleccionado(filtrados[0].id);
+        setGrupoSeleccionado((prev) =>
+          prev && filtrados.some((g) => g.id === prev) ? prev : filtrados[0].id
+        );
       } else {
         setGrupoSeleccionado(null);
       }
@@ -260,17 +347,31 @@ export default function AsistenciaApp() {
   };
 
   useEffect(() => {
-    cargarGrupos(deporteSeleccionado);
-  }, [deporteSeleccionado]);
+    if (logueado) {
+      cargarGrupos(deporteSeleccionado);
+    }
+  }, [deporteSeleccionado, logueado]);
 
-  // Cargar alumnos y asistencias compartidas
+  // Sincronizar nombre de categoría en el formulario de padrón
+  useEffect(() => {
+    const grp = grupos.find((g) => g.id === Number(grupoSeleccionado));
+    if (grp) {
+      setPadronCategoriaInput(grp.categoria);
+      setGrupoDestinoExcel(grp.categoria);
+    } else {
+      setPadronCategoriaInput('');
+      setGrupoDestinoExcel('');
+    }
+  }, [grupoSeleccionado, grupos]);
+
   const cargarAlumnosYAsistencias = async () => {
-    if (!fecha) return;
-    if (!grupoSeleccionado) {
+    if (!fecha || !grupoSeleccionado) {
       setAlumnos([]);
       setAsistencias({});
       return;
     }
+
+    const permiteComida = tieneOpcionComida(deporteSeleccionado);
 
     const { data: alumnosData } = await supabase
       .from('alumnos')
@@ -283,7 +384,7 @@ export default function AsistenciaApp() {
       setAlumnos(alumnosData);
       const ids = alumnosData.map((a) => a.id);
 
-      const mapaAsistencias: { [key: number]: AsistenciaState } = {};
+      const mapaAsistencias: Record<number, AsistenciaState> = {};
       if (ids.length > 0) {
         const { data: asistData } = await supabase
           .from('asistencias')
@@ -296,7 +397,7 @@ export default function AsistenciaApp() {
           if (existente) {
             mapaAsistencias[al.id] = {
               estado: existente.estado,
-              almuerzo: existente.almuerzo,
+              almuerzo: permiteComida ? Boolean(existente.almuerzo) : false,
             };
           } else {
             mapaAsistencias[al.id] = { estado: 'presente', almuerzo: false };
@@ -308,116 +409,219 @@ export default function AsistenciaApp() {
   };
 
   useEffect(() => {
-    cargarAlumnosYAsistencias();
-  }, [grupoSeleccionado, fecha]);
+    if (logueado) {
+      cargarAlumnosYAsistencias();
+    }
+  }, [grupoSeleccionado, fecha, deporteSeleccionado, logueado]);
 
-  // Cargar datos cuando se abre el Panel Admin o Coordinador
+  // Cargar datos para la pestaña Análisis (Coordinación / Dirección UGI)
   const cargarReporteMaestro = async () => {
     if (!fechaDesde || !fechaHasta) return;
     setCargandoAdmin(true);
-    const { data, error } = await supabase
-      .from('asistencias')
-      .select(`
-        id,
-        fecha,
-        estado,
-        almuerzo,
-        alumnos (
+
+    const nombresPermitidos = DEPORTES_OFICIALES.map((d) => d.nombre);
+
+    const [asistRes, alumnosRes] = await Promise.all([
+      supabase
+        .from('asistencias')
+        .select(
+          `
           id,
-          nombre,
-          apellido,
-          grupos (
+          fecha,
+          estado,
+          almuerzo,
+          alumno_id,
+          alumnos (
             id,
             nombre,
-            categoria,
-            tipo
+            apellido,
+            grupo_id,
+            grupos (
+              id,
+              nombre,
+              categoria,
+              tipo
+            )
           )
+        `
         )
-      `)
-      .gte('fecha', fechaDesde)
-      .lte('fecha', fechaHasta)
-      .order('fecha', { ascending: false });
+        .gte('fecha', fechaDesde)
+        .lte('fecha', fechaHasta)
+        .order('fecha', { ascending: false }),
+      supabase.from('alumnos').select('*').eq('activo', true).order('apellido'),
+    ]);
 
-    if (!error && data) {
-      setRegistrosAdmin(data);
+    if (!asistRes.error && asistRes.data) {
+      const soloColoniaYCoyfd = asistRes.data.filter((r: any) =>
+        nombresPermitidos.includes(r.alumnos?.grupos?.nombre)
+      );
+      setRegistrosAdmin(soloColoniaYCoyfd);
+    }
+    if (!alumnosRes.error && alumnosRes.data) {
+      setAlumnosAreaCompleta(alumnosRes.data);
     }
     setCargandoAdmin(false);
   };
 
   useEffect(() => {
-    if (vista === 'admin' || vista === 'coordinador') {
+    if (logueado && tabActiva === 'analisis') {
       cargarReporteMaestro();
     }
-  }, [vista, fechaDesde, fechaHasta]);
+  }, [logueado, tabActiva, fechaDesde, fechaHasta, deporteSeleccionado]);
 
-  // Verificar contraseña Admin
-  const ingresarAdmin = (e: React.FormEvent) => {
+  // ============================================================================
+  // 4. LOGIN CON CONTRASEÑA PARA PROFE, COORDINACIÓN Y DIRECCIÓN UGI
+  // ============================================================================
+  const ingresarApp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputClave === CLAVE_ADMIN) {
-      setInputClave('');
-      setVista('admin');
-    } else {
-      alert('Contraseña incorrecta');
+    const clave = inputPinDeporte.trim();
+    if (!clave) {
+      setLoginError('Ingresá tu contraseña para continuar.');
+      return;
     }
-  };
-
-  // Verificar PIN de Deporte (Profe o Coordinador) contra `deportes_auth` en Supabase
-  const ingresarDeporte = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const pinIngresado = inputPinDeporte.trim();
-    if (!pinIngresado) return;
 
     setValidandoPin(true);
-    const infoDeporte = DEPORTES_OFICIALES.find((d) => d.nombre === deporteSeleccionado);
+    setLoginError('');
 
-    const { data, error } = await supabase
+    const { data: filasAuth } = await supabase
       .from('deportes_auth')
       .select('*')
-      .eq('deporte', deporteSeleccionado)
-      .maybeSingle();
+      .in(
+        'deporte',
+        DEPORTES_OFICIALES.map((d) => d.nombre)
+      );
 
     setValidandoPin(false);
 
-    const pinProfeEsperado = !error && data?.pin ? String(data.pin).trim() : infoDeporte?.pinDefault;
-    const pinCoordEsperado =
-      !error && data?.pin_coord ? String(data.pin_coord).trim() : infoDeporte?.pinCoordDefault;
+    const obtenerClavesArea = (nombreArea: string) => {
+      const def = DEPORTES_OFICIALES.find((d) => d.nombre === nombreArea)!;
+      const fila = filasAuth?.find((r: any) => r.deporte === nombreArea);
+      return {
+        profe: fila?.pin ? String(fila.pin).trim() : def.pinDefault,
+        coord: fila?.pin_coord ? String(fila.pin_coord).trim() : def.pinCoordDefault,
+      };
+    };
 
-    if (pinIngresado === pinCoordEsperado || pinIngresado === CLAVE_ADMIN) {
+    // 1. Si ingresó la clave maestra de Dirección UGI
+    if (clave.toLowerCase() === CLAVE_ADMIN) {
+      const areaInicial = areaLogin === 'TODOS' ? 'Colonia' : areaLogin;
       try {
-        localStorage.setItem('ugi_deporte_logueado', deporteSeleccionado);
+        localStorage.setItem('ugi_deporte_logueado', areaLogin);
+        localStorage.setItem('ugi_rol_logueado', 'admin');
+      } catch {}
+      setDeporteSeleccionado(areaInicial);
+      setRolSesion('admin');
+      setFiltroAreaAnalisis(areaLogin === 'TODOS' ? 'TODOS' : 'ACTUAL');
+      setTabActiva(areaLogin === 'TODOS' ? 'analisis' : 'asistencia');
+      setInputPinDeporte('');
+      setLogueado(true);
+      return;
+    }
+
+    if (areaLogin === 'TODOS') {
+      setLoginError('Contraseña de Dirección UGI incorrecta.');
+      return;
+    }
+
+    // 2. Validar clave de Profe o Coordinación para el área elegida (Colonia o COYFD)
+    const clavesActual = obtenerClavesArea(areaLogin);
+    const otraArea = areaLogin === 'Colonia' ? 'COYFD' : 'Colonia';
+    const clavesOtra = obtenerClavesArea(otraArea);
+
+    if (clave === clavesActual.coord) {
+      try {
+        localStorage.setItem('ugi_deporte_logueado', areaLogin);
         localStorage.setItem('ugi_rol_logueado', 'coordinador');
       } catch {}
-      setEsCoordinador(true);
+      setDeporteSeleccionado(areaLogin);
+      setRolSesion('coordinador');
+      setFiltroAreaAnalisis('ACTUAL');
       setFiltroCategoriaCoord('TODAS');
+      setTabActiva('asistencia');
       setInputPinDeporte('');
-      setModoCategoria('ninguno');
-      setVista('coordinador');
-    } else if (pinIngresado === pinProfeEsperado) {
+      setLogueado(true);
+      return;
+    }
+
+    if (clave === clavesActual.profe) {
       try {
-        localStorage.setItem('ugi_deporte_logueado', deporteSeleccionado);
+        localStorage.setItem('ugi_deporte_logueado', areaLogin);
         localStorage.setItem('ugi_rol_logueado', 'profe');
       } catch {}
-      setEsCoordinador(false);
+      setDeporteSeleccionado(areaLogin);
+      setRolSesion('profe');
+      setTabActiva('asistencia');
       setInputPinDeporte('');
-      setModoCategoria('ninguno');
-      setVista('profe');
-    } else {
-      alert('PIN incorrecto para ' + deporteSeleccionado);
+      setLogueado(true);
+      return;
     }
+
+    if (clave === clavesOtra.profe || clave === clavesOtra.coord) {
+      setLoginError(`Esa contraseña corresponde a ${otraArea}, no a ${areaLogin}.`);
+      return;
+    }
+
+    setLoginError(`Contraseña incorrecta para ${areaLogin}.`);
   };
 
-  const cerrarSesionDeporte = () => {
+  const cerrarSesion = () => {
     try {
       localStorage.removeItem('ugi_deporte_logueado');
       localStorage.removeItem('ugi_rol_logueado');
     } catch {}
-    setEsCoordinador(false);
+    setLogueado(false);
     setInputPinDeporte('');
+    setLoginError('');
     setModoCategoria('ninguno');
-    setVista('login_deporte');
   };
 
-  // Crear o Editar Categoría
+  // ============================================================================
+  // 5. GESTIÓN DE CATEGORÍAS / GRUPOS Y CARGA ÁGIL DE LISTADOS
+  // ============================================================================
+  const asegurarGrupoEnSupabase = async (
+    nombreArea: string,
+    nombreCat: string
+  ): Promise<Grupo | null> => {
+    const catLimpia = nombreCat.trim();
+    if (!catLimpia) return null;
+
+    const existente = grupos.find(
+      (g) =>
+        g.nombre === nombreArea &&
+        g.categoria.trim().toLowerCase() === catLimpia.toLowerCase()
+    );
+    if (existente) return existente;
+
+    // Verificar en base de datos por si no estaba en estado local
+    const { data: enDb } = await supabase
+      .from('grupos')
+      .select('*')
+      .eq('nombre', nombreArea)
+      .ilike('categoria', catLimpia)
+      .maybeSingle();
+
+    if (enDb) return enDb as Grupo;
+
+    const infoArea = DEPORTES_OFICIALES.find((d) => d.nombre === nombreArea)!;
+    const { data: creado, error } = await supabase
+      .from('grupos')
+      .insert([
+        {
+          nombre: nombreArea,
+          categoria: catLimpia,
+          tipo: infoArea.tipo,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error || !creado) {
+      mostrarToast('Error al crear grupo: ' + (error?.message || ''));
+      return null;
+    }
+    return creado as Grupo;
+  };
+
   const guardarCategoria = async () => {
     if (!inputCategoria.trim()) return;
     const infoDeporte = DEPORTES_OFICIALES.find((d) => d.nombre === deporteSeleccionado)!;
@@ -436,11 +640,12 @@ export default function AsistenciaApp() {
         .single();
 
       if (error) {
-        alert('Error al crear categoría: ' + error.message);
+        mostrarToast('Error al crear grupo: ' + error.message);
       } else if (data) {
         setModoCategoria('ninguno');
         setInputCategoria('');
         await cargarGrupos(deporteSeleccionado, data.id);
+        mostrarToast(`Grupo "${data.categoria}" creado`);
       }
     } else if (modoCategoria === 'editar' && grupoSeleccionado) {
       const { error } = await supabase
@@ -449,72 +654,441 @@ export default function AsistenciaApp() {
         .eq('id', grupoSeleccionado);
 
       if (error) {
-        alert('Error al editar categoría: ' + error.message);
+        mostrarToast('Error al renombrar grupo: ' + error.message);
       } else {
         setModoCategoria('ninguno');
         setInputCategoria('');
         await cargarGrupos(deporteSeleccionado, grupoSeleccionado);
+        mostrarToast('Nombre del grupo actualizado');
       }
     }
   };
 
-  // Agregar Alumno
-  const agregarAlumno = async (e: React.FormEvent) => {
+  // Carga masiva pegando texto desde WhatsApp o Excel
+  const cargarListadoMasivoTexto = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!grupoSeleccionado || !nuevoNombre.trim() || !nuevoApellido.trim()) return;
+    const catDestino = padronCategoriaInput.trim();
+    if (!catDestino) {
+      mostrarToast('Escribí o elegí el nombre del grupo primero');
+      return;
+    }
+
+    const lineas = padronTextoMasivo.split(/\r?\n/);
+    const parseados = lineas
+      .map(parsearLineaAlumno)
+      .filter((x): x is { apellido: string; nombre: string } => Boolean(x));
+
+    if (parseados.length === 0) {
+      mostrarToast('Pegá al menos un alumno en la lista');
+      return;
+    }
+
+    setCargandoMasivo(true);
+    const grupoObj = await asegurarGrupoEnSupabase(deporteSeleccionado, catDestino);
+    if (!grupoObj) {
+      setCargandoMasivo(false);
+      return;
+    }
+
+    // Traer alumnos actuales del grupo para no duplicar
+    const { data: actuales } = await supabase
+      .from('alumnos')
+      .select('id, nombre, apellido')
+      .eq('grupo_id', grupoObj.id)
+      .eq('activo', true);
+
+    const clavesActuales = new Set(
+      (actuales || []).map(
+        (a) => `${a.apellido.trim().toLowerCase()}|${a.nombre.trim().toLowerCase()}`
+      )
+    );
+
+    const nuevosAInsertar: {
+      grupo_id: number;
+      apellido: string;
+      nombre: string;
+      activo: boolean;
+    }[] = [];
+
+    parseados.forEach((al) => {
+      const clave = `${al.apellido.trim().toLowerCase()}|${al.nombre.trim().toLowerCase()}`;
+      if (!clavesActuales.has(clave)) {
+        clavesActuales.add(clave);
+        nuevosAInsertar.push({
+          grupo_id: grupoObj.id,
+          apellido: al.apellido.trim(),
+          nombre: al.nombre.trim(),
+          activo: true,
+        });
+      }
+    });
+
+    if (nuevosAInsertar.length > 0) {
+      const { error } = await supabase.from('alumnos').insert(nuevosAInsertar);
+      if (error) {
+        setCargandoMasivo(false);
+        mostrarToast('Error al subir listado: ' + error.message);
+        return;
+      }
+    }
+
+    setPadronTextoMasivo('');
+    await cargarGrupos(deporteSeleccionado, grupoObj.id);
+    await cargarAlumnosYAsistencias();
+    setCargandoMasivo(false);
+
+    if (nuevosAInsertar.length === 0) {
+      mostrarToast('Todos esos alumnos ya estaban en el grupo');
+    } else {
+      mostrarToast(`¡${nuevosAInsertar.length} alumnos cargados en ${grupoObj.categoria}!`);
+    }
+  };
+
+  // Procesar archivo Excel (.xlsx, .xls) o CSV (.csv)
+  const manejarArchivoExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setArchivoNombre(file.name);
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
+      const detectados: AlumnoImportado[] = [];
+      let detectoMultiplesGrupos = false;
+      const gruposVistos = new Set<string>();
+
+      wb.SheetNames.forEach((sheetName) => {
+        const sheet = wb.Sheets[sheetName];
+        if (!sheet) return;
+        const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+        if (!rows || rows.length === 0) return;
+
+        // Buscar fila de encabezado si existe
+        let idxGrupo = -1;
+        let idxApellido = -1;
+        let idxNombre = -1;
+        let idxNombreCompleto = -1;
+        let filaInicio = 0;
+
+        for (let i = 0; i < Math.min(5, rows.length); i++) {
+          const r = rows[i].map((c) => String(c || '').trim().toLowerCase());
+          const gCol = r.findIndex((c) =>
+            /^(grupo|categor[ií]a|sala|turno|equipo|comisi[oó]n)$/.test(c)
+          );
+          const apCol = r.findIndex((c) => /^(apellido|apellidos)$/.test(c));
+          const nomCol = r.findIndex((c) => /^(nombre|nombres)$/.test(c));
+          const fullCol = r.findIndex((c) =>
+            /^(alumno|alumnos|nombre y apellido|apellido y nombre|jugador|participante)$/.test(c)
+          );
+
+          if (apCol !== -1 || fullCol !== -1 || (gCol !== -1 && nomCol !== -1)) {
+            idxGrupo = gCol;
+            idxApellido = apCol;
+            idxNombre = nomCol;
+            idxNombreCompleto = fullCol;
+            filaInicio = i + 1;
+            break;
+          }
+        }
+
+        const nombreHojaLimpio =
+          wb.SheetNames.length > 1 && !/^hoja\s*\d+|^sheet\s*\d+/i.test(sheetName.trim())
+            ? sheetName.trim()
+            : '';
+
+        for (let rIdx = filaInicio; rIdx < rows.length; rIdx++) {
+          const fila = rows[rIdx];
+          if (!Array.isArray(fila)) continue;
+          const celdasNoVacias = fila.map((c) => String(c ?? '').trim()).filter(Boolean);
+          if (celdasNoVacias.length === 0) continue;
+
+          const grupoFila =
+            idxGrupo !== -1 && String(fila[idxGrupo] ?? '').trim()
+              ? String(fila[idxGrupo]).trim()
+              : nombreHojaLimpio || grupoDestinoExcel || padronCategoriaInput || 'Grupo General';
+
+          let apellido = '';
+          let nombre = '';
+
+          if (idxApellido !== -1 && idxNombre !== -1) {
+            apellido = String(fila[idxApellido] ?? '').trim();
+            nombre = String(fila[idxNombre] ?? '').trim() || '-';
+          } else if (idxNombreCompleto !== -1) {
+            const parsed = parsearLineaAlumno(String(fila[idxNombreCompleto] ?? ''));
+            if (parsed) {
+              apellido = parsed.apellido;
+              nombre = parsed.nombre;
+            }
+          } else if (celdasNoVacias.length >= 2 && !celdasNoVacias[0].includes(',')) {
+            // Si hay 2 columnas sin encabezado claro: Col 0 = Apellido, Col 1 = Nombre
+            const c0 = celdasNoVacias[0].replace(/^\d+\s*[.)\-:]?\s*/, '').trim();
+            const c1 = celdasNoVacias[1].trim();
+            if (/^(apellido|nombre|alumno|grupo|categor[ií]a)$/i.test(c0)) continue;
+            apellido = c0;
+            nombre = c1;
+          } else {
+            const parsed = parsearLineaAlumno(celdasNoVacias[0]);
+            if (parsed) {
+              apellido = parsed.apellido;
+              nombre = parsed.nombre;
+            }
+          }
+
+          if (apellido && !/^(total|promedio|subtotal|alumno|apellido)$/i.test(apellido)) {
+            gruposVistos.add(grupoFila);
+            detectados.push({
+              grupo: grupoFila,
+              apellido,
+              nombre: nombre || '-',
+            });
+          }
+        }
+      });
+
+      if (gruposVistos.size > 1) {
+        detectoMultiplesGrupos = true;
+        setModoImportExcel('por_columna_o_hoja');
+      } else {
+        setModoImportExcel('grupo_actual');
+      }
+
+      setAlumnosExcelPreview(detectados);
+      if (detectados.length === 0) {
+        mostrarToast('No se encontraron nombres válidos en el archivo');
+      } else {
+        mostrarToast(
+          `${detectados.length} alumnos leídos del archivo${
+            detectoMultiplesGrupos ? ` (${gruposVistos.size} grupos)` : ''
+          }`
+        );
+      }
+    } catch {
+      mostrarToast('No se pudo leer el archivo Excel / CSV');
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const confirmarImportacionExcel = async () => {
+    if (alumnosExcelPreview.length === 0) return;
+
+    const grupoUnico = (grupoDestinoExcel || padronCategoriaInput).trim();
+    if (modoImportExcel === 'grupo_actual' && !grupoUnico) {
+      mostrarToast('Indicá a qué grupo querés subir el listado');
+      return;
+    }
+
+    setCargandoMasivo(true);
+    let totalInsertados = 0;
+    let ultimoGrupoId: number | undefined;
+
+    // Agrupar por nombre de grupo destino
+    const mapaPorGrupo = new Map<string, { apellido: string; nombre: string }[]>();
+    alumnosExcelPreview.forEach((item) => {
+      const gDestino =
+        modoImportExcel === 'grupo_actual' ? grupoUnico : item.grupo || grupoUnico || 'General';
+      if (!mapaPorGrupo.has(gDestino)) mapaPorGrupo.set(gDestino, []);
+      mapaPorGrupo.get(gDestino)!.push({ apellido: item.apellido, nombre: item.nombre });
+    });
+
+    for (const [nombreGrupo, listaAls] of mapaPorGrupo.entries()) {
+      const grp = await asegurarGrupoEnSupabase(deporteSeleccionado, nombreGrupo);
+      if (!grp) continue;
+      ultimoGrupoId = grp.id;
+
+      const { data: actuales } = await supabase
+        .from('alumnos')
+        .select('apellido, nombre')
+        .eq('grupo_id', grp.id)
+        .eq('activo', true);
+
+      const existentesSet = new Set(
+        (actuales || []).map(
+          (a) => `${a.apellido.trim().toLowerCase()}|${a.nombre.trim().toLowerCase()}`
+        )
+      );
+
+      const paraInsertar: {
+        grupo_id: number;
+        apellido: string;
+        nombre: string;
+        activo: boolean;
+      }[] = [];
+
+      listaAls.forEach((al) => {
+        const key = `${al.apellido.trim().toLowerCase()}|${al.nombre.trim().toLowerCase()}`;
+        if (!existentesSet.has(key)) {
+          existentesSet.add(key);
+          paraInsertar.push({
+            grupo_id: grp.id,
+            apellido: al.apellido.trim(),
+            nombre: al.nombre.trim(),
+            activo: true,
+          });
+        }
+      });
+
+      if (paraInsertar.length > 0) {
+        const { error } = await supabase.from('alumnos').insert(paraInsertar);
+        if (!error) totalInsertados += paraInsertar.length;
+      }
+    }
+
+    setAlumnosExcelPreview([]);
+    setArchivoNombre('');
+    await cargarGrupos(deporteSeleccionado, ultimoGrupoId);
+    await cargarAlumnosYAsistencias();
+    setCargandoMasivo(false);
+    mostrarToast(`¡Listo! Se sumaron ${totalInsertados} alumnos desde el archivo.`);
+  };
+
+  const descargarPlantillaExcel = () => {
+    const grupoEjemplo =
+      grupos.find((g) => g.id === Number(grupoSeleccionado))?.categoria || 'Grupo 1';
+    const datosPlantilla = [
+      { Grupo: grupoEjemplo, Apellido: 'Gómez', Nombre: 'Juan' },
+      { Grupo: grupoEjemplo, Apellido: 'Pérez', Nombre: 'Mateo' },
+      { Grupo: grupoEjemplo, Apellido: 'Rodríguez', Nombre: 'Lucía' },
+    ];
+    const ws = XLSX.utils.json_to_sheet(datosPlantilla);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Listado');
+    XLSX.writeFile(wb, `Plantilla_Listado_${deporteSeleccionado}.xlsx`);
+  };
+
+  // Agregar Alumno Individual
+  const agregarAlumnoIndividual = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!grupoSeleccionado || !nuevoApellido.trim() || !nuevoNombre.trim()) return;
 
     const { error } = await supabase.from('alumnos').insert([
       {
         grupo_id: grupoSeleccionado,
-        nombre: nuevoNombre.trim(),
         apellido: nuevoApellido.trim(),
+        nombre: nuevoNombre.trim(),
         activo: true,
       },
     ]);
 
     if (error) {
-      alert('Error al agregar alumno: ' + error.message);
+      mostrarToast('Error al agregar alumno: ' + error.message);
     } else {
-      setNuevoNombre('');
+      const nombreAgregado = `${nuevoApellido.trim()}, ${nuevoNombre.trim()}`;
       setNuevoApellido('');
+      setNuevoNombre('');
       await cargarAlumnosYAsistencias();
+      mostrarToast(`${nombreAgregado} sumado al grupo`);
     }
   };
 
   // Dar de baja alumno
   const eliminarAlumno = async (id: number, nombreCompleto: string) => {
-    if (!confirm(`¿Quitar a ${nombreCompleto} de esta categoría?`)) return;
+    if (!confirm(`¿Quitar a ${nombreCompleto} de este grupo?`)) return;
     await supabase.from('alumnos').update({ activo: false }).eq('id', id);
     await cargarAlumnosYAsistencias();
+    mostrarToast(`${nombreCompleto} quitado`);
   };
 
+  // Vaciar grupo completo (por recambio de listado)
+  const vaciarGrupoActual = async () => {
+    const grp = grupos.find((g) => g.id === Number(grupoSeleccionado));
+    if (!grp || alumnos.length === 0) return;
+    if (
+      !confirm(
+        `¿Seguro que querés quitar a los ${alumnos.length} alumnos actuales de "${grp.categoria}" para cargar una lista nueva?`
+      )
+    ) {
+      return;
+    }
+    await supabase.from('alumnos').update({ activo: false }).eq('grupo_id', grp.id);
+    await cargarAlumnosYAsistencias();
+    mostrarToast(`Se vació el listado de ${grp.categoria}`);
+  };
+
+  // ============================================================================
+  // 6. TOMAR Y GUARDAR ASISTENCIA (CON COMIDA EN COLONIA Y SIN COMIDA EN COYFD)
+  // ============================================================================
   const handleEstado = (id: number, nuevoEstado: 'presente' | 'ausente' | 'tarde') => {
+    const permiteComida = tieneOpcionComida(deporteSeleccionado);
     setAsistencias((prev) => ({
       ...prev,
       [id]: {
         estado: nuevoEstado,
-        almuerzo: nuevoEstado === 'ausente' ? false : prev[id]?.almuerzo || false,
+        almuerzo:
+          !permiteComida || nuevoEstado === 'ausente'
+            ? false
+            : prev[id]?.almuerzo || false,
       },
     }));
   };
 
   const handleAlmuerzo = (id: number) => {
-    setAsistencias((prev) => ({
-      ...prev,
-      [id]: { ...prev[id], almuerzo: !prev[id]?.almuerzo },
-    }));
+    if (!tieneOpcionComida(deporteSeleccionado)) return;
+    setAsistencias((prev) => {
+      const actual = prev[id] || { estado: 'presente', almuerzo: false };
+      const nuevoAlmuerzo = !actual.almuerzo;
+      // Si estaba ausente y le marcan comida, pasa automáticamente a presente
+      const nuevoEstado =
+        nuevoAlmuerzo && actual.estado === 'ausente' ? 'presente' : actual.estado;
+      return {
+        ...prev,
+        [id]: {
+          estado: nuevoEstado,
+          almuerzo: nuevoAlmuerzo,
+        },
+      };
+    });
   };
 
-  // Guardar Asistencia (y actualizar automáticamente el Google Sheet del Deporte en vivo)
+  const marcarTodosPresentes = () => {
+    const permiteComida = tieneOpcionComida(deporteSeleccionado);
+    setAsistencias((prev) => {
+      const nuevo: Record<number, AsistenciaState> = { ...prev };
+      alumnos.forEach((al) => {
+        nuevo[al.id] = {
+          estado: 'presente',
+          almuerzo: permiteComida ? prev[al.id]?.almuerzo || false : false,
+        };
+      });
+      return nuevo;
+    });
+    mostrarToast('Todos marcados Presente (P)');
+  };
+
+  const marcarTodosComida = (activar: boolean) => {
+    if (!tieneOpcionComida(deporteSeleccionado)) return;
+    setAsistencias((prev) => {
+      const nuevo: Record<number, AsistenciaState> = { ...prev };
+      alumnos.forEach((al) => {
+        const est = prev[al.id]?.estado || 'presente';
+        nuevo[al.id] = {
+          estado: est,
+          almuerzo: est === 'ausente' ? false : activar,
+        };
+      });
+      return nuevo;
+    });
+    mostrarToast(
+      activar
+        ? 'Comida marcada a todos los presentes'
+        : 'Se desmarcó la comida del grupo'
+    );
+  };
+
   const guardarAsistencias = async () => {
     if (alumnos.length === 0) return;
     setCargando(true);
-    const registros = alumnos.map((al) => ({
-      fecha,
-      alumno_id: al.id,
-      estado: asistencias[al.id]?.estado || 'presente',
-      almuerzo: asistencias[al.id]?.almuerzo || false,
-    }));
+    const permiteComida = tieneOpcionComida(deporteSeleccionado);
+
+    const registros = alumnos.map((al) => {
+      const est = asistencias[al.id]?.estado || 'presente';
+      return {
+        fecha,
+        alumno_id: al.id,
+        estado: est,
+        almuerzo: permiteComida && est !== 'ausente' ? Boolean(asistencias[al.id]?.almuerzo) : false,
+      };
+    });
 
     const { error } = await supabase
       .from('asistencias')
@@ -522,57 +1096,77 @@ export default function AsistenciaApp() {
     setCargando(false);
 
     if (error) {
-      alert('Error al guardar: ' + error.message);
+      mostrarToast('Error al guardar: ' + error.message);
     } else {
+      mostrarToast(`✓ Asistencia de ${deporteSeleccionado} guardada`);
       if (googleScriptUrl.trim()) {
         sincronizarGoogleSheetDeporte(deporteSeleccionado, false);
       }
-      alert('¡Asistencia guardada! La planilla de Google Sheets de ' + deporteSeleccionado + ' se actualiza automáticamente.');
     }
   };
 
-  // Guardar la URL /exec en Supabase para todas las disciplinas (así queda fija en todos los celulares y navegadores)
+  // ============================================================================
+  // 7. SINCRONIZACIÓN CON GOOGLE SHEETS Y GESTIÓN DE CLAVES
+  // ============================================================================
+  const guardarPinsAdmin = async (deporte: string) => {
+    const nuevoProfe = inputEditPinProfe.trim();
+    const nuevoCoord = inputEditPinCoord.trim();
+    if (!nuevoProfe || !nuevoCoord) {
+      mostrarToast('Completá ambas contraseñas');
+      return;
+    }
+    const { error } = await supabase.from('deportes_auth').upsert(
+      {
+        deporte,
+        pin: nuevoProfe,
+        pin_coord: nuevoCoord,
+      },
+      { onConflict: 'deporte' }
+    );
+
+    if (error) {
+      mostrarToast('Error al guardar claves: ' + error.message);
+    } else {
+      setPinsDeportes((prev) => ({
+        ...prev,
+        [deporte]: { pin: nuevoProfe, pinCoord: nuevoCoord },
+      }));
+      setDeporteEditandoPin(null);
+      mostrarToast(`Contraseñas de ${deporte} actualizadas`);
+    }
+  };
+
   const guardarMotorEnSupabase = async () => {
     const urlLimpia = googleScriptUrl.trim();
     if (!urlLimpia) {
-      alert('Pegá primero la URL que termina en /exec');
+      mostrarToast('Pegá primero la URL que termina en /exec');
       return;
     }
     setGuardandoMotorGlobal(true);
-    try {
-      localStorage.setItem('ugi_google_script_url', urlLimpia);
-    } catch {}
-
+    const nombresPermitidos = DEPORTES_OFICIALES.map((d) => d.nombre);
     const { error } = await supabase
       .from('deportes_auth')
       .update({ script_url: urlLimpia })
-      .neq('id', 0);
+      .in('deporte', nombresPermitidos);
 
     setGuardandoMotorGlobal(false);
     if (error) {
-      alert('Error al guardar en Supabase: ' + error.message);
+      mostrarToast('Error al guardar URL: ' + error.message);
     } else {
-      alert('¡Listo! El link /exec quedó guardado en la base de datos para todos los deportes y dispositivos.');
+      mostrarToast('URL de Google Script guardada');
     }
   };
 
-  // Crear o Actualizar en vivo el Google Sheet de un Deporte (organizado por Categoría y con Porcentajes)
   const sincronizarGoogleSheetDeporte = async (
     nombreDeporte: string,
     mostrarAlerta = true,
     abrirAlTerminar = false
   ) => {
     const urlDestino = (googleScriptUrl || GOOGLE_SCRIPT_URL_FIJA).trim();
-    if (!urlDestino) {
-      if (mostrarAlerta || abrirAlTerminar) {
-        alert(
-          'El administrador UGI aún no cargó el link /exec en el Panel Maestro.'
-        );
-      }
-      return;
-    }
+    if (!urlDestino) return;
 
     const emailDeporte = (emailsPorDeporte[nombreDeporte] || '').trim();
+    const esColoniaDeporte = tieneOpcionComida(nombreDeporte);
 
     setSincronizandoSheet(true);
     try {
@@ -584,8 +1178,6 @@ export default function AsistenciaApp() {
 
       const listaGrupos = gruposDeporte || [];
       const idsGrupos = listaGrupos.map((g) => g.id);
-      const esColoniaDeporte =
-        DEPORTES_OFICIALES.find((d) => d.nombre === nombreDeporte)?.tipo === 'colonia';
 
       let alumnosDeporte: any[] = [];
       if (idsGrupos.length > 0) {
@@ -611,7 +1203,6 @@ export default function AsistenciaApp() {
 
       const mapaGrupoPorId = new Map(listaGrupos.map((g) => [g.id, g]));
 
-      // Construye la tabla de una categoría (o de todo el deporte) con % por alumno y fila final de % de la categoría
       const construirTablaConPorcentajes = (
         listaAlumnos: any[],
         fechasColumnas: string[],
@@ -685,7 +1276,6 @@ export default function AsistenciaApp() {
           return fila;
         });
 
-        // Fila final con el % promedio de la categoría y el % de asistencia de cada día
         const pctPromedioCategoria =
           sumaTotal > 0 ? `${Math.round((sumaPresTarde / sumaTotal) * 100)}%` : '-';
 
@@ -722,7 +1312,6 @@ export default function AsistenciaApp() {
         return [...filasAlumnos, filaPromedio];
       };
 
-      // 1. Resumen por Categoría con porcentajes
       let totalAlumnosDeporte = 0;
       let totalPresDeporte = 0;
       let totalTardDeporte = 0;
@@ -793,7 +1382,6 @@ export default function AsistenciaApp() {
         resumenCategorias.push(filaTotalDeporte);
       }
 
-      // 2. Una pestaña por cada Categoría con sus alumnos, sus fechas y sus porcentajes
       const hojasPorGrupo = listaGrupos.map((gr, idx) => {
         const alsGrupo = alumnosDeporte.filter((a) => a.grupo_id === gr.id);
         const idsAlsGrupo = new Set(alsGrupo.map((a) => a.id));
@@ -811,12 +1399,11 @@ export default function AsistenciaApp() {
           .slice(0, 25);
 
         return {
-          nombreHoja: nombreLimpio || `Categoria_${idx + 1}`,
+          nombreHoja: nombreLimpio || `Grupo_${idx + 1}`,
           filas: construirTablaConPorcentajes(alsGrupo, fechasCat, gr.categoria),
         };
       });
 
-      // 3. Pestaña con todos los alumnos del deporte
       const fechasGenerales = Array.from(new Set(asistenciasHist.map((a) => a.fecha))).sort();
       const matrizGeneral = construirTablaConPorcentajes(
         alumnosDeporte,
@@ -841,456 +1428,1474 @@ export default function AsistenciaApp() {
         setSheetUrlsPorDeporte((prev) => {
           const nuevo = { ...prev, [nombreDeporte]: resJson.sheetUrl };
           try {
-            localStorage.setItem('ugi_sheet_urls', JSON.stringify(nuevo));
+            localStorage.setItem('ugi_sheet_urls_colonia_coyfd_v2', JSON.stringify(nuevo));
           } catch {}
           return nuevo;
         });
 
-        // Guardamos el link del Sheet para este deporte y aseguramos que script_url quede en toda la tabla
-        await supabase
-          .from('deportes_auth')
-          .update({ sheet_url: resJson.sheetUrl, script_url: urlDestino })
-          .eq('deporte', nombreDeporte);
-
-        await supabase
-          .from('deportes_auth')
-          .update({ script_url: urlDestino })
-          .is('script_url', null);
+        await supabase.from('deportes_auth').upsert(
+          {
+            deporte: nombreDeporte,
+            sheet_url: resJson.sheetUrl,
+            script_url: urlDestino,
+          },
+          { onConflict: 'deporte' }
+        );
 
         if (abrirAlTerminar) {
           window.open(resJson.sheetUrl, '_blank', 'noopener,noreferrer');
         } else if (mostrarAlerta) {
-          alert(
-            `¡Google Sheet de ${nombreDeporte} actualizado con todas las categorías y porcentajes!`
-          );
+          mostrarToast(`Google Sheet de ${nombreDeporte} actualizado`);
         }
       } else if (mostrarAlerta || abrirAlTerminar) {
-        alert(
-          'El script respondió con un error: ' +
-            (resJson?.error || 'Revisá que el script esté publicado como "Cualquier persona".')
-        );
+        mostrarToast('Error en Google Script: ' + (resJson?.error || 'Verificar permisos'));
       }
     } catch {
       if (mostrarAlerta || abrirAlTerminar) {
-        alert(
-          'No se pudo conectar con el Google Apps Script. Verificá que la URL termine en /exec y que en "Quién tiene acceso" diga "Cualquier persona".'
-        );
+        mostrarToast('No se pudo conectar con Google Sheets');
       }
     } finally {
       setSincronizandoSheet(false);
     }
   };
 
-  // ==========================================
-  // BLOQUE REUTILIZABLE: ACCESO DIRECTO AL GOOGLE SHEET DEL DEPORTE (SIN CONFIGURACIONES)
-  // ==========================================
-  const renderTarjetaGoogleSheet = (deporteTarget: string) => {
-    const urlSheet = sheetUrlsPorDeporte[deporteTarget];
-
+  // ============================================================================
+  // 8. PANTALLA DE LOGIN (ESTÉTICA DEPORTES UGI C.C.B.A.)
+  // ============================================================================
+  if (!logueado) {
     return (
-      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 mb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex-1 min-w-[200px]">
-            <div className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-              📊 Planilla Google Sheets de {deporteTarget} (En Vivo)
+      <div className="ugi-login-screen">
+        <form onSubmit={ingresarApp} className="ugi-login-card" method="POST">
+          <img
+            src="/escudo-ccba.png"
+            alt="Escudo Club Ciudad de Buenos Aires"
+            className="ugi-login-shield"
+          />
+          <div>
+            <span className="ugi-login-pill">Club Ciudad de Buenos Aires</span>
+          </div>
+          <h1>Unidad de Gestión Integral</h1>
+          <p className="ugi-login-sub">Asistencia y listados · Colonia y COYFD</p>
+
+          <div className="mb-3.5 text-left">
+            <label htmlFor="login-area" className="ugi-label">
+              1. Elegí tu área
+            </label>
+            <select
+              id="login-area"
+              name="area"
+              className="ugi-select"
+              value={areaLogin}
+              onChange={(e) => {
+                setAreaLogin(e.target.value);
+                setLoginError('');
+              }}
+            >
+              <option value="Colonia">Colonia (con almuerzo / comida)</option>
+              <option value="COYFD">COYFD</option>
+              <option value="TODOS">Dirección UGI (Colonia + COYFD)</option>
+            </select>
+          </div>
+
+          <div className="mb-4 text-left">
+            <label htmlFor="login-pass" className="ugi-label">
+              2. Contraseña de Profe o Coordinación
+            </label>
+            <div className="relative flex items-center">
+              <input
+                id="login-pass"
+                name="clave"
+                type={mostrarPasswordLogin ? 'text' : 'password'}
+                placeholder="Ingresá tu clave..."
+                value={inputPinDeporte}
+                onChange={(e) => {
+                  setInputPinDeporte(e.target.value);
+                  if (loginError) setLoginError('');
+                }}
+                autoComplete="current-password"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                required
+                className="ugi-input pr-12"
+              />
+              <button
+                type="button"
+                onClick={() => setMostrarPasswordLogin((v) => !v)}
+                aria-pressed={mostrarPasswordLogin}
+                aria-label={mostrarPasswordLogin ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                className="absolute right-2.5 p-2 text-slate-500 hover:text-slate-800 rounded-lg"
+              >
+                {mostrarPasswordLogin ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
-            <p className="text-[11px] text-emerald-800 mt-0.5">
-              Planilla oficial en modo <b>Solo Lectura</b> (se actualiza sola al guardar asistencia). Si requerís permiso de edición, solicitalo a UGI.
+            <p
+              id="login-error"
+              role="status"
+              aria-live="polite"
+              className="text-red-600 text-xs font-bold mt-2 min-h-[1.1rem]"
+            >
+              {loginError}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            {urlSheet ? (
-              <>
-                <a
-                  href={urlSheet}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-emerald-700 text-white px-3.5 py-2 rounded-lg text-xs font-bold hover:bg-emerald-800 flex items-center gap-1.5 shadow-xs"
-                >
-                  <ExternalLink size={14} /> Abrir Google Sheet
-                </a>
-                <button
-                  type="button"
-                  onClick={() => sincronizarGoogleSheetDeporte(deporteTarget, true, false)}
-                  disabled={sincronizandoSheet}
-                  className="bg-white border border-emerald-300 text-emerald-800 px-2.5 py-2 rounded-lg text-xs font-semibold hover:bg-emerald-100 flex items-center gap-1"
-                  title="Refrescar datos de la planilla"
-                >
-                  <RefreshCw size={13} className={sincronizandoSheet ? 'animate-spin' : ''} />
-                  {sincronizandoSheet ? 'Actualizando...' : 'Actualizar'}
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={() => sincronizarGoogleSheetDeporte(deporteTarget, false, true)}
-                disabled={sincronizandoSheet}
-                className="bg-emerald-700 disabled:bg-slate-300 text-white px-3.5 py-2 rounded-lg text-xs font-bold hover:bg-emerald-800 flex items-center gap-1.5 shadow-xs"
-              >
-                <ExternalLink size={14} />
-                {sincronizandoSheet ? 'Abriendo Google Sheet...' : 'Abrir Google Sheet'}
-              </button>
-            )}
-          </div>
-        </div>
+          <button type="submit" disabled={validandoPin} className="ugi-btn">
+            {validandoPin ? 'Verificando clave...' : 'Entrar al panel'}
+          </button>
+        </form>
       </div>
     );
-  };
-
-  // ==========================================
-  // VISTA 0: ACCESO POR PIN DE DEPORTE (PROFES)
-  // ==========================================
-  if (vista === 'login_deporte') {
-    return (
-      <main className="min-h-screen bg-slate-100 p-4 flex items-center justify-center">
-        <div className="bg-white rounded-xl shadow-sm p-6 w-full max-w-sm border border-slate-200">
-          <div className="flex justify-between items-start mb-2">
-            <div className="w-6" />
-            <div className="text-blue-600">
-              <Lock size={30} />
-            </div>
-            <button
-              type="button"
-              onClick={() => setVista('login_admin')}
-              className="text-slate-400 hover:text-blue-600 transition-colors p-1"
-              title="Acceso Director UGI"
-            >
-              <ShieldAlert size={18} />
-            </button>
-          </div>
-
-          <h1 className="text-lg font-bold text-slate-800 text-center mb-1">
-            Acceso por Deporte - UGI
-          </h1>
-          <p className="text-xs text-slate-500 text-center mb-4">
-            Elegí tu deporte o colonia e ingresá tu <b>PIN de Profe</b> o tu <b>PIN de Coordinador</b>.
-          </p>
-
-          <form onSubmit={ingresarDeporte} className="space-y-3">
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">
-                Deporte / Actividad:
-              </label>
-              <select
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm text-slate-800 font-medium"
-                value={deporteSeleccionado}
-                onChange={(e) => {
-                  setDeporteSeleccionado(e.target.value);
-                  setInputPinDeporte('');
-                }}
-              >
-                {DEPORTES_OFICIALES.map((dep) => (
-                  <option key={dep.nombre} value={dep.nombre}>
-                    {dep.nombre} ({dep.tipo.toUpperCase()})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">
-                PIN del Deporte:
-              </label>
-              <input
-                type="password"
-                placeholder="Ingresá tu PIN..."
-                value={inputPinDeporte}
-                onChange={(e) => setInputPinDeporte(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm text-slate-800 text-center tracking-widest"
-                autoFocus
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={validandoPin}
-              className="w-full bg-blue-600 disabled:bg-slate-300 text-white py-2.5 rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
-            >
-              {validandoPin ? 'Verificando PIN...' : `Ingresar a ${deporteSeleccionado}`}
-            </button>
-          </form>
-
-          <div className="mt-4 pt-3 border-t border-slate-100 text-center">
-            <button
-              type="button"
-              onClick={() => setVista('login_admin')}
-              className="text-xs text-slate-500 hover:text-blue-600 font-medium inline-flex items-center gap-1"
-            >
-              <ShieldAlert size={13} /> Acceso Director UGI (Tablero Maestro)
-            </button>
-          </div>
-        </div>
-      </main>
-    );
   }
 
-  // ==========================================
-  // VISTA 1: PANTALLA DE CONTRASEÑA ADMIN
-  // ==========================================
-  if (vista === 'login_admin') {
+  // ============================================================================
+  // 9. VARIABLES DERIVADAS DE LA SESIÓN ACTIVA
+  // ============================================================================
+  const esCoordOAdmin = rolSesion === 'coordinador' || rolSesion === 'admin';
+  const esColoniaActiva = tieneOpcionComida(deporteSeleccionado);
+  const categoriasDelDeporte = grupos.filter((g) => g.nombre === deporteSeleccionado);
+  const grupoActual = grupos.find((g) => g.id === Number(grupoSeleccionado));
+
+  const alumnosFiltrados = alumnos.filter((al) => {
+    if (!busquedaAlumno.trim()) return true;
+    const q = busquedaAlumno.trim().toLowerCase();
     return (
-      <main className="min-h-screen bg-slate-100 p-4 flex items-center justify-center">
-        <div className="bg-white rounded-xl shadow-sm p-6 w-full max-w-sm border border-slate-200">
-          <div className="flex justify-center mb-3 text-blue-600">
-            <Lock size={32} />
+      al.apellido.toLowerCase().includes(q) ||
+      al.nombre.toLowerCase().includes(q) ||
+      `${al.apellido}, ${al.nombre}`.toLowerCase().includes(q)
+    );
+  });
+
+  const totalPresentesHoy = alumnos.filter((al) => {
+    const est = asistencias[al.id]?.estado || 'presente';
+    return est === 'presente' || est === 'tarde';
+  }).length;
+  const totalAusentesHoy = alumnos.filter(
+    (al) => (asistencias[al.id]?.estado || 'presente') === 'ausente'
+  ).length;
+  const totalAlmuerzosHoy = esColoniaActiva
+    ? alumnos.filter((al) => {
+        const a = asistencias[al.id];
+        return a && a.estado !== 'ausente' && a.almuerzo;
+      }).length
+    : 0;
+  const pctHoy =
+    alumnos.length > 0 ? Math.round((totalPresentesHoy / alumnos.length) * 100) : 0;
+
+  // Cantidad de alumnos detectados en vivo en el textarea de carga masiva
+  const cantidadDetectadaEnTexto = padronTextoMasivo
+    .split(/\r?\n/)
+    .map(parsearLineaAlumno)
+    .filter(Boolean).length;
+
+  const etiquetaRol =
+    rolSesion === 'admin'
+      ? 'Dirección UGI'
+      : rolSesion === 'coordinador'
+      ? 'Coordinación'
+      : 'Profe';
+
+  const urlSheetActual = sheetUrlsPorDeporte[deporteSeleccionado];
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      {/* CABECERA PRINCIPAL CON ESCUDO C.C.B.A. */}
+      <header className="ugi-header">
+        <div className="ugi-brand">
+          <img src="/escudo-ccba.png" alt="C.C.B.A." />
+          <div>
+            <h1>Unidad de Gestión Integral</h1>
+            <small>
+              {deporteSeleccionado} · {etiquetaRol}
+              {esColoniaActiva ? ' · 🍴 Con Comida' : ' · Sin Comida'}
+            </small>
           </div>
-          <h2 className="text-lg font-bold text-slate-800 text-center mb-1">
-            Acceso Director UGI
-          </h2>
-          <p className="text-xs text-slate-500 text-center mb-4">
-            Ingresá la clave para ver el Tablero General y los Google Sheets de cada deporte.
-          </p>
-          <form onSubmit={ingresarAdmin} className="space-y-3">
-            <input
-              type="password"
-              placeholder="Contraseña..."
-              value={inputClave}
-              onChange={(e) => setInputClave(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm text-slate-800 text-center"
-              autoFocus
-            />
-            <div className="flex gap-2">
+        </div>
+        <button type="button" onClick={cerrarSesion} className="ugi-btn-salir">
+          Cambiar / Salir
+        </button>
+      </header>
+
+      {/* BARRA DE ESTADO Y ACCESO DIRECTO AL GOOGLE SHEET */}
+      <div className="ugi-estado flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <span
+            className={
+              estadoConexion === 'ok' ? 'text-emerald-600 font-extrabold' : 'text-amber-600 font-extrabold'
+            }
+          >
+            ●
+          </span>
+          <span>
+            {estadoConexion === 'ok'
+              ? `Conectado en vivo · ${deporteSeleccionado}`
+              : 'Verificando conexión con la base de datos...'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {urlSheetActual ? (
+            <>
+              <a
+                href={urlSheetActual}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg hover:bg-emerald-100"
+              >
+                <ExternalLink size={12} /> Abrir Sheet {deporteSeleccionado}
+              </a>
               <button
                 type="button"
-                onClick={() => setVista('login_deporte')}
-                className="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-bold hover:bg-slate-200"
+                onClick={() => sincronizarGoogleSheetDeporte(deporteSeleccionado, true, false)}
+                disabled={sincronizandoSheet}
+                className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-slate-100 border border-slate-300 px-2 py-1 rounded-lg hover:bg-slate-200"
               >
-                Cancelar
+                <RefreshCw size={12} className={sincronizandoSheet ? 'animate-spin' : ''} />
+                {sincronizandoSheet ? 'Sincronizando...' : 'Actualizar Sheet'}
               </button>
-              <button
-                type="submit"
-                className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-blue-700"
-              >
-                Ingresar
-              </button>
-            </div>
-          </form>
-        </div>
-      </main>
-    );
-  }
-
-  // ==========================================
-  // VISTA 2: PANEL ADMINISTRADOR UGI
-  // ==========================================
-  if (vista === 'admin') {
-    const registrosFiltrados = registrosAdmin.filter((r: any) =>
-      filtroDeporteAdmin === 'TODOS' ? true : r.alumnos?.grupos?.nombre === filtroDeporteAdmin
-    );
-    const totalPresentes = registrosFiltrados.filter(
-      (r) => r.estado === 'presente' || r.estado === 'tarde'
-    ).length;
-    const pctAdmin =
-      registrosFiltrados.length > 0
-        ? Math.round((totalPresentes / registrosFiltrados.length) * 100)
-        : 0;
-    const totalAlmuerzosAdmin = registrosFiltrados.filter((r) => r.almuerzo).length;
-
-    return (
-      <main className="min-h-screen bg-slate-100 p-4 max-w-3xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm p-5 mb-4 border border-slate-200">
-          <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={() => setVista('login_deporte')}
-              className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1"
-            >
-              <ArrowLeft size={14} /> Volver al Acceso de Deportes
-            </button>
-            <span className="text-xs bg-slate-800 text-white px-2.5 py-1 rounded font-bold">
-              PANEL MAESTRO UGI
-            </span>
-          </div>
-
-          <h1 className="text-xl font-bold text-slate-800 mb-1">
-            Tablero General y Google Sheets por Deporte
-          </h1>
-          <p className="text-xs text-slate-500 mb-4">
-            Unidad de Gestión Integral • Club Ciudad de Buenos Aires
-          </p>
-
-          {/* Filtros */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Desde:</label>
-              <input
-                type="date"
-                value={fechaDesde}
-                onChange={(e) => setFechaDesde(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Hasta:</label>
-              <input
-                type="date"
-                value={fechaHasta}
-                onChange={(e) => setFechaHasta(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Deporte:</label>
-              <select
-                value={filtroDeporteAdmin}
-                onChange={(e) => setFiltroDeporteAdmin(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-              >
-                <option value="TODOS">Todos los deportes</option>
-                {DEPORTES_OFICIALES.map((d) => (
-                  <option key={d.nombre} value={d.nombre}>
-                    {d.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {filtroDeporteAdmin !== 'TODOS' ? (
-            renderTarjetaGoogleSheet(filtroDeporteAdmin)
+            </>
           ) : (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 mb-5">
-              <div className="text-xs font-bold text-emerald-950 mb-1">
-                📊 Planillas Google Sheets por Deporte (En tu cuenta • Solo Lectura)
-              </div>
-              <p className="text-[11px] text-emerald-800 mb-3">
-                Tocá cualquier deporte para abrir su planilla en vivo (si aún no estaba creada, la crea en el acto en tu carpeta <b>UGI - Asistencias en Vivo</b>):
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {DEPORTES_OFICIALES.map((d) => {
-                  const url = sheetUrlsPorDeporte[d.nombre];
-                  return url ? (
-                    <a
-                      key={d.nombre}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg font-semibold hover:bg-emerald-800 flex items-center gap-1 shadow-xs"
-                    >
-                      <ExternalLink size={11} /> {d.nombre}
-                    </a>
-                  ) : (
-                    <button
-                      key={d.nombre}
-                      type="button"
-                      disabled={sincronizandoSheet}
-                      onClick={() => sincronizarGoogleSheetDeporte(d.nombre, false, true)}
-                      className="text-[11px] bg-white border border-emerald-300 text-emerald-800 px-2.5 py-1.5 rounded-lg font-semibold hover:bg-emerald-100 flex items-center gap-1"
-                    >
-                      <ExternalLink size={11} /> {d.nombre}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => sincronizarGoogleSheetDeporte(deporteSeleccionado, false, true)}
+              disabled={sincronizandoSheet}
+              className="inline-flex items-center gap-1 text-xs font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg hover:bg-emerald-100"
+            >
+              <ExternalLink size={12} />
+              {sincronizandoSheet
+                ? 'Generando Sheet...'
+                : `Crear / Abrir Sheet ${deporteSeleccionado}`}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* CONTENEDOR CENTRAL */}
+      <main className="ugi-container">
+        {/* PESTAÑAS DE NAVEGACIÓN ESTILO DEPORTES UGI */}
+        <div
+          className="ugi-tabs"
+          role="tablist"
+          style={{
+            gridTemplateColumns: esCoordOAdmin ? 'repeat(4, 1fr)' : 'repeat(2, 1fr)',
+          }}
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === 'asistencia'}
+            onClick={() => setTabActiva('asistencia')}
+            className="ugi-tab"
+          >
+            <ClipboardList size={15} />
+            <span>Asistencia</span>
+          </button>
+
+          {esCoordOAdmin && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tabActiva === 'analisis'}
+              onClick={() => setTabActiva('analisis')}
+              className="ugi-tab"
+            >
+              <BarChart3 size={15} />
+              <span>Análisis</span>
+            </button>
           )}
 
-          {/* Gestión de PINs y Accesos por Deporte */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 mb-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <Key size={14} className="text-blue-600" /> Claves y PINs de Acceso por Deporte
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Revisá o cambiá el PIN de Profe y de Coordinador de cada disciplina deportiva.
-                </p>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === 'padron'}
+            onClick={() => setTabActiva('padron')}
+            className="ugi-tab"
+          >
+            <Upload size={15} />
+            <span>Listados / Padrón</span>
+          </button>
+
+          {esCoordOAdmin && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tabActiva === 'config'}
+              onClick={() => setTabActiva('config')}
+              className="ugi-tab"
+            >
+              <Key size={15} />
+              <span>Claves y Sheets</span>
+            </button>
+          )}
+        </div>
+
+        {/* TARJETA DE FILTROS EN CASCADA (ÁREA, CATEGORÍA/GRUPO Y FECHA) */}
+        {tabActiva !== 'config' && (
+          <div className="ugi-card">
+            {/* Si entró como Dirección UGI puede alternar entre Colonia y COYFD */}
+            {rolSesion === 'admin' && (
+              <div className="mb-3">
+                <label htmlFor="sel-area-activa" className="ugi-label">
+                  Área activa
+                </label>
+                <select
+                  id="sel-area-activa"
+                  className="ugi-select"
+                  value={deporteSeleccionado}
+                  onChange={(e) => setDeporteSeleccionado(e.target.value)}
+                >
+                  {DEPORTES_OFICIALES.map((d) => (
+                    <option key={d.nombre} value={d.nombre}>
+                      {d.nombre} {d.tieneComida ? '(Con opción de comida)' : '(Sin comida)'}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <button
-                type="button"
-                onClick={() => setMostrarPinsAdmin(!mostrarPinsAdmin)}
-                className="text-xs bg-white border border-slate-300 text-slate-700 px-3 py-1.5 rounded-lg font-semibold hover:bg-slate-100"
-              >
-                {mostrarPinsAdmin ? 'Ocultar PINs' : 'Ver PINs de los 12 Deportes'}
-              </button>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="sel-grupo" className="ugi-label" style={{ marginBottom: 0 }}>
+                    Grupo / Categoría ({deporteSeleccionado})
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {grupoSeleccionado && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModoCategoria('editar');
+                          setInputCategoria(grupoActual?.categoria || '');
+                        }}
+                        className="text-xs font-bold text-sky-700 hover:underline inline-flex items-center gap-1"
+                      >
+                        <Edit2 size={12} /> Renombrar
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModoCategoria('crear');
+                        setInputCategoria('');
+                      }}
+                      className="text-xs font-extrabold text-blue-900 bg-sky-100 border border-sky-200 px-2 py-0.5 rounded-md hover:bg-sky-200 inline-flex items-center gap-1"
+                    >
+                      <Plus size={12} /> Nuevo grupo
+                    </button>
+                  </div>
+                </div>
+
+                {categoriasDelDeporte.length > 0 ? (
+                  <select
+                    id="sel-grupo"
+                    className="ugi-select"
+                    value={grupoSeleccionado || ''}
+                    onChange={(e) => setGrupoSeleccionado(Number(e.target.value))}
+                  >
+                    {categoriasDelDeporte.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.categoria}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    Sin grupos en <b>{deporteSeleccionado}</b>. Tocá <b>+ Nuevo grupo</b> o subí un
+                    listado en la pestaña <b>Listados / Padrón</b>.
+                  </div>
+                )}
+              </div>
+
+              {tabActiva === 'asistencia' && (
+                <div>
+                  <label htmlFor="input-fecha-sesion" className="ugi-label">
+                    Fecha de la sesión
+                  </label>
+                  <input
+                    id="input-fecha-sesion"
+                    type="date"
+                    value={fecha}
+                    onChange={(e) => setFecha(e.target.value)}
+                    className="ugi-input"
+                  />
+                </div>
+              )}
+
+              {tabActiva === 'padron' && (
+                <div className="flex flex-col justify-end">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-extrabold text-slate-500 uppercase">
+                        Alumnos en {grupoActual?.categoria || 'este grupo'}
+                      </div>
+                      <div className="text-xl font-extrabold text-slate-900">
+                        {alumnos.length} inscriptos
+                      </div>
+                    </div>
+                    {alumnos.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={vaciarGrupoActual}
+                        className="ugi-quitar"
+                        title="Quitar todos los alumnos de este grupo"
+                      >
+                        Vaciar grupo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {mostrarPinsAdmin && (
-              <div className="mt-3 pt-3 border-t border-slate-200 overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+            {/* Editor inline para crear o renombrar grupo */}
+            {modoCategoria !== 'ninguno' && (
+              <div className="mt-3 p-3 bg-sky-50 border border-sky-200 rounded-xl flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+                <input
+                  type="text"
+                  placeholder={
+                    deporteSeleccionado === 'Colonia'
+                      ? 'Ej: Grupo 6 años, Turno Mañana, Grupo Roja...'
+                      : 'Ej: COYFD Mañana, Grupo A, Formativa...'
+                  }
+                  value={inputCategoria}
+                  onChange={(e) => setInputCategoria(e.target.value)}
+                  className="ugi-input flex-1 bg-white"
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={guardarCategoria}
+                    className="ugi-btn"
+                    style={{ width: 'auto', minHeight: '44px' }}
+                  >
+                    Guardar grupo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModoCategoria('ninguno')}
+                    className="ugi-btn-sec"
+                    style={{ minHeight: '44px' }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* =====================================================================
+            PESTAÑA 1: ASISTENCIA (P / A / T + COMIDA SIEMPRE EN COLONIA)
+           ===================================================================== */}
+        {tabActiva === 'asistencia' && (
+          <section aria-label="Toma de asistencia">
+            {/* KPIs rápidos del día */}
+            {grupoSeleccionado && alumnos.length > 0 && (
+              <div
+                className="grid gap-2.5 mb-3.5"
+                style={{
+                  gridTemplateColumns: esColoniaActiva
+                    ? 'repeat(3, 1fr)'
+                    : 'repeat(2, 1fr)',
+                }}
+              >
+                <div className="ugi-kpi kpi-ok">
+                  <span>Presentismo hoy</span>
+                  <b>{pctHoy}%</b>
+                  <span>
+                    {totalPresentesHoy} de {alumnos.length} ({totalAusentesHoy} aus.)
+                  </span>
+                </div>
+
+                {esColoniaActiva ? (
+                  <div className="ugi-kpi kpi-warn">
+                    <span>🍴 Comida hoy</span>
+                    <b>{totalAlmuerzosHoy}</b>
+                    <span>almuerzan en Colonia</span>
+                  </div>
+                ) : (
+                  <div className="ugi-kpi">
+                    <span>Grupo activo</span>
+                    <b className="truncate px-1 text-base sm:text-xl">
+                      {grupoActual?.categoria || '-'}
+                    </b>
+                    <span>COYFD (sin comida)</span>
+                  </div>
+                )}
+
+                <div className="ugi-kpi">
+                  <span>Inscriptos</span>
+                  <b>{alumnos.length}</b>
+                  <span>en {grupoActual?.categoria}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="ugi-card">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <div>
+                  <h3>Lista de asistencia · {grupoActual?.categoria || deporteSeleccionado}</h3>
+                  <p className="ugi-hint" style={{ marginBottom: 0 }}>
+                    P = Presente · A = Ausente · T = Tarde
+                    {esColoniaActiva ? ' · 🍴 = Se queda a comer en Colonia' : ''}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={marcarTodosPresentes}
+                    disabled={alumnos.length === 0}
+                    className="ugi-btn-sec"
+                  >
+                    Todos presentes (P)
+                  </button>
+                  {esColoniaActiva && alumnos.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        marcarTodosComida(totalAlmuerzosHoy < totalPresentesHoy)
+                      }
+                      className="ugi-btn-sec"
+                      style={{
+                        background: '#ffedd5',
+                        color: '#9a3412',
+                        borderColor: '#fed7aa',
+                      }}
+                    >
+                      <Utensils size={14} />
+                      {totalAlmuerzosHoy < totalPresentesHoy
+                        ? 'Todos con comida'
+                        : 'Quitar comidas'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Buscador rápido cuando el grupo tiene varios alumnos */}
+              {alumnos.length > 5 && (
+                <div className="relative mb-3">
+                  <Search
+                    size={16}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+                  <input
+                    type="search"
+                    placeholder="Buscar alumno por apellido o nombre..."
+                    value={busquedaAlumno}
+                    onChange={(e) => setBusquedaAlumno(e.target.value)}
+                    className="ugi-input pl-10"
+                    style={{ minHeight: '42px', fontSize: '0.9rem' }}
+                  />
+                </div>
+              )}
+
+              {/* Listado de alumnos */}
+              {!grupoSeleccionado || alumnos.length === 0 ? (
+                <div className="text-center py-6 px-3">
+                  <p className="text-sm text-slate-500 mb-3">
+                    No hay alumnos cargados en{' '}
+                    <b>{grupoActual?.categoria || deporteSeleccionado}</b>.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setTabActiva('padron')}
+                    className="ugi-btn-sec"
+                  >
+                    <Upload size={15} /> Ir a subir o pegar el listado del grupo
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  {alumnosFiltrados.map((al) => {
+                    const actual = asistencias[al.id] || {
+                      estado: 'presente',
+                      almuerzo: false,
+                    };
+
+                    return (
+                      <div key={al.id} className="ugi-asist-row">
+                        <div className="min-w-0 flex-1 pr-2">
+                          <div className="font-bold text-slate-900 text-[0.94rem] truncate">
+                            {al.apellido}, {al.nombre}
+                          </div>
+                          {esColoniaActiva && actual.almuerzo && actual.estado !== 'ausente' && (
+                            <span className="inline-flex items-center gap-1 text-[0.7rem] font-extrabold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full mt-0.5">
+                              🍴 Con comida
+                            </span>
+                          )}
+                        </div>
+
+                        <div
+                          className="ugi-pat"
+                          role="group"
+                          aria-label={`Asistencia de ${al.apellido}, ${al.nombre}`}
+                        >
+                          {/* En Colonia SIEMPRE se muestra el botón de Comida */}
+                          {esColoniaActiva && (
+                            <button
+                              type="button"
+                              onClick={() => handleAlmuerzo(al.id)}
+                              aria-pressed={actual.almuerzo && actual.estado !== 'ausente'}
+                              title={
+                                actual.almuerzo
+                                  ? 'Come en la Colonia (tocar para quitar)'
+                                  : 'Sin comida (tocar para marcar comida)'
+                              }
+                              className="ugi-comida-btn"
+                            >
+                              <Utensils size={14} />
+                              <span className="hidden sm:inline">
+                                {actual.almuerzo && actual.estado !== 'ausente'
+                                  ? 'Comida'
+                                  : 'Sin comida'}
+                              </span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            data-e="presente"
+                            aria-pressed={actual.estado === 'presente'}
+                            onClick={() => handleEstado(al.id, 'presente')}
+                            title="Presente"
+                            className="ugi-pat-btn"
+                          >
+                            P
+                          </button>
+                          <button
+                            type="button"
+                            data-e="ausente"
+                            aria-pressed={actual.estado === 'ausente'}
+                            onClick={() => handleEstado(al.id, 'ausente')}
+                            title="Ausente"
+                            className="ugi-pat-btn"
+                          >
+                            A
+                          </button>
+                          <button
+                            type="button"
+                            data-e="tarde"
+                            aria-pressed={actual.estado === 'tarde'}
+                            onClick={() => handleEstado(al.id, 'tarde')}
+                            title="Tarde"
+                            className="ugi-pat-btn"
+                          >
+                            T
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {alumnos.length > 0 && (
+                <button
+                  type="button"
+                  onClick={guardarAsistencias}
+                  disabled={cargando}
+                  className="ugi-btn ok mt-4"
+                >
+                  <Check size={18} />
+                  {cargando
+                    ? 'Guardando y actualizando Google Sheet...'
+                    : `Guardar asistencia de ${grupoActual?.categoria || deporteSeleccionado}`}
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* =====================================================================
+            PESTAÑA 2: SUBIDA ÁGIL DE LISTADOS Y PADRÓN (PROFE Y COORDINACIÓN)
+           ===================================================================== */}
+        {tabActiva === 'padron' && (
+          <section aria-label="Carga ágil de listados y padrón">
+            {/* OPCIÓN 1: SUBIR ARCHIVO EXCEL (.XLSX / .XLS) O CSV */}
+            <div className="ugi-card">
+              <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+                <div>
+                  <h3 className="flex items-center gap-2">
+                    <FileSpreadsheet size={18} className="text-emerald-700" />
+                    1. Subir listado desde archivo Excel (.xlsx) o CSV
+                  </h3>
+                  <p className="ugi-hint" style={{ marginBottom: 0 }}>
+                    Seleccioná tu planilla de Excel o CSV. Detecta automáticamente las columnas{' '}
+                    <b>Apellido</b>, <b>Nombre</b> y <b>Grupo</b> (o múltiples pestañas).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={descargarPlantillaExcel}
+                  className="ugi-btn-sec"
+                >
+                  <Download size={14} /> Bajar plantilla Excel
+                </button>
+              </div>
+
+              <div className="mt-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={manejarArchivoExcel}
+                  className="sr-only"
+                  id="input-archivo-excel"
+                />
+                <label
+                  htmlFor="input-archivo-excel"
+                  className="cursor-pointer border-2 border-dashed border-sky-300 bg-sky-50/70 hover:bg-sky-100/70 transition-colors rounded-2xl p-5 flex flex-col items-center justify-center text-center"
+                >
+                  <Upload size={26} className="text-blue-800 mb-1.5" />
+                  <span className="text-sm font-extrabold text-slate-800">
+                    {archivoNombre
+                      ? `Archivo cargado: ${archivoNombre}`
+                      : 'Tocá acá para elegir tu archivo Excel (.xlsx, .xls) o CSV'}
+                  </span>
+                  <span className="text-xs text-slate-500 mt-0.5">
+                    Podés subir un grupo solo o toda la Colonia / COYFD junta en un mismo archivo
+                  </span>
+                </label>
+              </div>
+
+              {/* Vista previa e importación en 1 clic cuando se selecciona un Excel */}
+              {alumnosExcelPreview.length > 0 && (
+                <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div className="text-sm font-extrabold text-emerald-950">
+                      ✓ {alumnosExcelPreview.length} alumnos detectados en el archivo
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAlumnosExcelPreview([]);
+                        setArchivoNombre('');
+                      }}
+                      className="text-xs font-bold text-slate-600 hover:underline"
+                    >
+                      Cancelar archivo
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <label htmlFor="modo-import-excel" className="ugi-label">
+                        ¿Cómo querés importarlos?
+                      </label>
+                      <select
+                        id="modo-import-excel"
+                        className="ugi-select bg-white"
+                        value={modoImportExcel}
+                        onChange={(e) =>
+                          setModoImportExcel(
+                            e.target.value as 'grupo_actual' | 'por_columna_o_hoja'
+                          )
+                        }
+                      >
+                        <option value="grupo_actual">
+                          Cargar todos en un grupo específico
+                        </option>
+                        <option value="por_columna_o_hoja">
+                          Usar la columna &quot;Grupo&quot; o el nombre de cada pestaña del Excel
+                        </option>
+                      </select>
+                    </div>
+
+                    {modoImportExcel === 'grupo_actual' && (
+                      <div>
+                        <label htmlFor="grupo-destino-excel" className="ugi-label">
+                          Grupo destino en {deporteSeleccionado}
+                        </label>
+                        <input
+                          id="grupo-destino-excel"
+                          type="text"
+                          list="dl-grupos-area"
+                          value={grupoDestinoExcel}
+                          onChange={(e) => setGrupoDestinoExcel(e.target.value)}
+                          placeholder="Ej: Grupo 8 años"
+                          className="ugi-input bg-white"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="max-h-40 overflow-y-auto bg-white border border-emerald-200 rounded-lg p-2.5 mb-3 text-xs">
+                    {alumnosExcelPreview.slice(0, 15).map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="py-1 border-b border-slate-100 last:border-none flex justify-between gap-2"
+                      >
+                        <span className="font-bold text-slate-800">
+                          {item.apellido}, {item.nombre}
+                        </span>
+                        <span className="text-slate-500 font-semibold">
+                          {modoImportExcel === 'grupo_actual'
+                            ? grupoDestinoExcel || 'Sin grupo'
+                            : item.grupo}
+                        </span>
+                      </div>
+                    ))}
+                    {alumnosExcelPreview.length > 15 && (
+                      <div className="pt-1.5 text-center text-slate-500 font-semibold">
+                        ... y {alumnosExcelPreview.length - 15} alumnos más
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={confirmarImportacionExcel}
+                    disabled={cargandoMasivo}
+                    className="ugi-btn ok"
+                  >
+                    {cargandoMasivo
+                      ? 'Importando listado...'
+                      : `Confirmar y subir ${alumnosExcelPreview.length} alumnos a ${deporteSeleccionado}`}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* OPCIÓN 2: PEGAR LISTADO RÁPIDO DESDE WHATSAPP O EXCEL (IGUAL A APP DEPORTES) */}
+            <form onSubmit={cargarListadoMasivoTexto} className="ugi-card">
+              <h3>2. Pegar listado rápido (WhatsApp / Excel / Word)</h3>
+              <p className="ugi-hint">
+                Pegá la lista con un alumno por renglón (ej: <b>Gómez, Juan</b> o{' '}
+                <b>Juan Gómez</b>). Si el grupo no existe en <b>{deporteSeleccionado}</b>, se crea
+                automáticamente.
+              </p>
+
+              <datalist id="dl-grupos-area">
+                {categoriasDelDeporte.map((c) => (
+                  <option key={c.id} value={c.categoria} />
+                ))}
+              </datalist>
+
+              <div className="mb-3">
+                <label htmlFor="padron-cat-input" className="ugi-label">
+                  Grupo / Categoría de {deporteSeleccionado}
+                </label>
+                <input
+                  id="padron-cat-input"
+                  type="text"
+                  list="dl-grupos-area"
+                  required
+                  value={padronCategoriaInput}
+                  onChange={(e) => setPadronCategoriaInput(e.target.value)}
+                  placeholder={
+                    deporteSeleccionado === 'Colonia'
+                      ? 'Ej: Grupo 6 años, Turno Mañana...'
+                      : 'Ej: COYFD Turno Tarde, Grupo A...'
+                  }
+                  className="ugi-input"
+                />
+              </div>
+
+              <div className="mb-3">
+                <div className="flex justify-between items-center mb-1">
+                  <label htmlFor="padron-lista-textarea" className="ugi-label" style={{ marginBottom: 0 }}>
+                    Alumnos (uno por línea)
+                  </label>
+                  {cantidadDetectadaEnTexto > 0 && (
+                    <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                      {cantidadDetectadaEnTexto} alumnos detectados
+                    </span>
+                  )}
+                </div>
+                <textarea
+                  id="padron-lista-textarea"
+                  required
+                  value={padronTextoMasivo}
+                  onChange={(e) => setPadronTextoMasivo(e.target.value)}
+                  placeholder={'Gómez, Juan\nPérez, Mateo\nRodríguez, Lucía'}
+                  className="ugi-textarea"
+                />
+              </div>
+
+              <button type="submit" disabled={cargandoMasivo} className="ugi-btn">
+                {cargandoMasivo
+                  ? 'Cargando alumnos...'
+                  : `Cargar listado en ${padronCategoriaInput.trim() || 'el grupo'}`}
+              </button>
+            </form>
+
+            {/* OPCIÓN 3: SUMAR UN ALUMNO INDIVIDUAL Y ADMINISTRAR EL PLANTEL ACTUAL */}
+            {grupoSeleccionado && (
+              <div className="ugi-card">
+                <h3>
+                  3. Plantel actual de {grupoActual?.categoria} ({alumnos.length})
+                </h3>
+                <p className="ugi-hint">
+                  También podés sumar un alumno individualmente o dar de baja del listado.
+                </p>
+
+                <form
+                  onSubmit={agregarAlumnoIndividual}
+                  className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4"
+                >
+                  <input
+                    type="text"
+                    placeholder="Apellido"
+                    value={nuevoApellido}
+                    onChange={(e) => setNuevoApellido(e.target.value)}
+                    required
+                    className="ugi-input"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Nombre"
+                    value={nuevoNombre}
+                    onChange={(e) => setNuevoNombre(e.target.value)}
+                    required
+                    className="ugi-input"
+                  />
+                  <button type="submit" className="ugi-btn">
+                    <UserPlus size={16} /> Sumar al grupo
+                  </button>
+                </form>
+
+                {alumnos.length === 0 ? (
+                  <p className="text-center text-sm text-slate-500 py-4">
+                    Este grupo aún no tiene alumnos cargados.
+                  </p>
+                ) : (
+                  <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto pr-1">
+                    {alumnos.map((al) => (
+                      <div
+                        key={al.id}
+                        className="flex items-center justify-between py-2.5 gap-2 text-sm font-semibold"
+                      >
+                        <span className="text-slate-800">
+                          {al.apellido}, {al.nombre}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => eliminarAlumno(al.id, `${al.apellido}, ${al.nombre}`)}
+                          className="ugi-quitar inline-flex items-center gap-1"
+                        >
+                          <Trash2 size={13} /> Quitar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* =====================================================================
+            PESTAÑA 3: ANÁLISIS Y SEGUIMIENTO (COORDINACIÓN Y DIRECCIÓN UGI)
+           ===================================================================== */}
+        {tabActiva === 'analisis' && esCoordOAdmin && (
+          <section aria-label="Análisis de asistencia y seguimiento">
+            {(() => {
+              const viendoAmbasAreas =
+                rolSesion === 'admin' && filtroAreaAnalisis === 'TODOS';
+              const areaFiltro = viendoAmbasAreas ? 'TODOS' : deporteSeleccionado;
+              const mostrarComidaAnalisis =
+                areaFiltro === 'Colonia' || areaFiltro === 'TODOS';
+
+              const gruposAnalisis = grupos.filter((g) =>
+                areaFiltro === 'TODOS' ? true : g.nombre === areaFiltro
+              );
+
+              const registrosArea = registrosAdmin.filter((r: any) =>
+                areaFiltro === 'TODOS'
+                  ? true
+                  : r.alumnos?.grupos?.nombre === areaFiltro
+              );
+
+              const registrosFiltrados = registrosArea.filter((r: any) =>
+                filtroCategoriaCoord === 'TODAS'
+                  ? true
+                  : r.alumnos?.grupos?.categoria === filtroCategoriaCoord
+              );
+
+              const presentesTot = registrosFiltrados.filter(
+                (r) => r.estado === 'presente' || r.estado === 'tarde'
+              ).length;
+              const ausentesTot = registrosFiltrados.filter(
+                (r) => r.estado === 'ausente'
+              ).length;
+              const pctAsist =
+                registrosFiltrados.length > 0
+                  ? Math.round((presentesTot / registrosFiltrados.length) * 100)
+                  : 0;
+              const almuerzosTot = registrosFiltrados.filter(
+                (r) => r.alumnos?.grupos?.nombre === 'Colonia' && r.almuerzo
+              ).length;
+
+              // Construir matriz individual por alumno del área/grupo seleccionado
+              const idsGruposValidos = new Set(
+                gruposAnalisis
+                  .filter((g) =>
+                    filtroCategoriaCoord === 'TODAS'
+                      ? true
+                      : g.categoria === filtroCategoriaCoord
+                  )
+                  .map((g) => g.id)
+              );
+              const mapaGrupo = new Map(grupos.map((g) => [g.id, g]));
+
+              const matrizAlumnos = alumnosAreaCompleta
+                .filter((al) => idsGruposValidos.has(al.grupo_id))
+                .map((al) => {
+                  const gr = mapaGrupo.get(al.grupo_id);
+                  const regs = registrosFiltrados.filter((r) => r.alumno_id === al.id);
+                  const pres = regs.filter(
+                    (r) => r.estado === 'presente' || r.estado === 'tarde'
+                  ).length;
+                  const aus = regs.filter((r) => r.estado === 'ausente').length;
+                  const alm =
+                    gr?.nombre === 'Colonia'
+                      ? regs.filter((r) => r.almuerzo).length
+                      : 0;
+                  const pct =
+                    regs.length > 0 ? Math.round((pres / regs.length) * 100) : null;
+                  const alerta = pct !== null && pct < 70;
+                  return {
+                    id: al.id,
+                    alumno: `${al.apellido}, ${al.nombre}`,
+                    area: gr?.nombre || '',
+                    categoria: gr?.categoria || '',
+                    presentes: pres,
+                    ausentes: aus,
+                    almuerzos: alm,
+                    total: regs.length,
+                    pct,
+                    alerta,
+                  };
+                })
+                .sort((a, b) => (a.alerta === b.alerta ? 0 : a.alerta ? -1 : 1));
+
+              const totalAlertas = matrizAlumnos.filter((m) => m.alerta).length;
+
+              const exportarExcelAnalisis = () => {
+                const filas = matrizAlumnos.map((m) => {
+                  const base: Record<string, any> = {
+                    Área: m.area,
+                    Grupo: m.categoria,
+                    Alumno: m.alumno,
+                    '% Asistencia': m.pct !== null ? `${m.pct}%` : '-',
+                    Presentes: m.presentes,
+                    Ausentes: m.ausentes,
+                    'Clases Registradas': m.total,
+                  };
+                  if (mostrarComidaAnalisis) {
+                    base['Almuerzos (Colonia)'] =
+                      m.area === 'Colonia' ? m.almuerzos : '-';
+                  }
+                  base.Estado =
+                    m.pct === null
+                      ? 'Sin registros'
+                      : m.alerta
+                      ? 'Seguimiento (<70%)'
+                      : 'Óptimo';
+                  return base;
+                });
+                const ws = XLSX.utils.json_to_sheet(filas);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Matriz_Asistencia');
+                XLSX.writeFile(
+                  wb,
+                  `UGI_Asistencia_${areaFiltro}_${fechaDesde}_a_${fechaHasta}.xlsx`
+                );
+              };
+
+              return (
+                <>
+                  {/* Filtros de período y grupo */}
+                  <div className="ugi-card">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <div>
+                        <label htmlFor="f-desde" className="ugi-label">
+                          Desde
+                        </label>
+                        <input
+                          id="f-desde"
+                          type="date"
+                          value={fechaDesde}
+                          onChange={(e) => setFechaDesde(e.target.value)}
+                          className="ugi-input"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="f-hasta" className="ugi-label">
+                          Hasta
+                        </label>
+                        <input
+                          id="f-hasta"
+                          type="date"
+                          value={fechaHasta}
+                          onChange={(e) => setFechaHasta(e.target.value)}
+                          className="ugi-input"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="f-cat-coord" className="ugi-label">
+                          Grupo / Categoría
+                        </label>
+                        <select
+                          id="f-cat-coord"
+                          value={filtroCategoriaCoord}
+                          onChange={(e) => setFiltroCategoriaCoord(e.target.value)}
+                          className="ugi-select"
+                        >
+                          <option value="TODAS">
+                            Todos los grupos ({gruposAnalisis.length})
+                          </option>
+                          {gruposAnalisis.map((c) => (
+                            <option key={c.id} value={c.categoria}>
+                              {viendoAmbasAreas ? `${c.nombre} · ${c.categoria}` : c.categoria}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {rolSesion === 'admin' ? (
+                        <div>
+                          <label htmlFor="f-area-admin" className="ugi-label">
+                            Vista Dirección UGI
+                          </label>
+                          <select
+                            id="f-area-admin"
+                            value={filtroAreaAnalisis}
+                            onChange={(e) => {
+                              setFiltroAreaAnalisis(e.target.value);
+                              setFiltroCategoriaCoord('TODAS');
+                            }}
+                            className="ugi-select"
+                          >
+                            <option value="ACTUAL">Solo {deporteSeleccionado}</option>
+                            <option value="TODOS">Colonia + COYFD juntos</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={exportarExcelAnalisis}
+                            className="ugi-btn-sec w-full"
+                            style={{ minHeight: '48px' }}
+                          >
+                            <Download size={15} /> Bajar Excel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Tarjetas de KPIs estilo Deportes UGI */}
+                  <div
+                    className="grid gap-2.5 mb-3.5"
+                    style={{
+                      gridTemplateColumns: mostrarComidaAnalisis
+                        ? 'repeat(4, 1fr)'
+                        : 'repeat(3, 1fr)',
+                    }}
+                  >
+                    <div className="ugi-kpi kpi-ok">
+                      <span>Asistencia</span>
+                      <b>{pctAsist}%</b>
+                      <span>{presentesTot} pres.</span>
+                    </div>
+
+                    <div className="ugi-kpi kpi-bad">
+                      <span>Ausentes</span>
+                      <b>{ausentesTot}</b>
+                      <span>en el período</span>
+                    </div>
+
+                    {mostrarComidaAnalisis && (
+                      <div className="ugi-kpi kpi-warn">
+                        <span>🍴 Almuerzos</span>
+                        <b>{almuerzosTot}</b>
+                        <span>en Colonia</span>
+                      </div>
+                    )}
+
+                    <div className="ugi-kpi">
+                      <span>Alertas (&lt;70%)</span>
+                      <b>{totalAlertas}</b>
+                      <span>seguimiento</span>
+                    </div>
+                  </div>
+
+                  {/* Rendimiento / Porcentaje por cada Grupo con barras estilo Deportes */}
+                  {gruposAnalisis.length > 0 && (
+                    <div className="ugi-card">
+                      <h3>Porcentaje de asistencia por grupo</h3>
+                      <p className="ugi-hint">
+                        Tocá un grupo para filtrar la matriz individual de abajo.
+                      </p>
+                      <div className="space-y-3">
+                        {gruposAnalisis.map((cat) => {
+                          const regsCat = registrosArea.filter(
+                            (r: any) => r.alumnos?.grupos?.id === cat.id
+                          );
+                          const presCat = regsCat.filter(
+                            (r: any) => r.estado === 'presente' || r.estado === 'tarde'
+                          ).length;
+                          const pctCat =
+                            regsCat.length > 0
+                              ? Math.round((presCat / regsCat.length) * 100)
+                              : 0;
+                          const almCat =
+                            cat.nombre === 'Colonia'
+                              ? regsCat.filter((r: any) => r.almuerzo).length
+                              : 0;
+                          const activo = filtroCategoriaCoord === cat.categoria;
+                          const colorBarra =
+                            pctCat >= 80
+                              ? 'var(--ok)'
+                              : pctCat >= 70
+                              ? 'var(--sky)'
+                              : 'var(--bad)';
+
+                          return (
+                            <button
+                              key={cat.id}
+                              type="button"
+                              onClick={() =>
+                                setFiltroCategoriaCoord(activo ? 'TODAS' : cat.categoria)
+                              }
+                              className={`w-full text-left p-3 rounded-xl border transition-all ${
+                                activo
+                                  ? 'bg-sky-50 border-sky-400 shadow-xs'
+                                  : 'bg-slate-50/70 border-slate-200 hover:bg-white'
+                              }`}
+                            >
+                              <div className="flex justify-between items-center text-sm font-bold mb-1.5 gap-2">
+                                <span className="text-slate-900">
+                                  {viendoAmbasAreas
+                                    ? `${cat.nombre} · ${cat.categoria}`
+                                    : cat.categoria}
+                                </span>
+                                <span className="text-xs font-extrabold text-slate-700">
+                                  {regsCat.length > 0
+                                    ? `${pctCat}% (${presCat}/${regsCat.length})`
+                                    : 'Sin registros'}
+                                  {cat.nombre === 'Colonia' && regsCat.length > 0
+                                    ? ` · 🍴 ${almCat}`
+                                    : ''}
+                                </span>
+                              </div>
+                              <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                                <div
+                                  style={{
+                                    width: `${pctCat}%`,
+                                    background: colorBarra,
+                                  }}
+                                  className="h-full rounded-full transition-all"
+                                />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Matriz Individual de Alumnos (con alertas < 70%) */}
+                  <div className="ugi-card">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                      <div>
+                        <h3>Matriz individual de asistencia</h3>
+                        <p className="ugi-hint" style={{ marginBottom: 0 }}>
+                          Se marca en seguimiento si el presentismo baja del 70%.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={exportarExcelAnalisis}
+                        className="ugi-btn-sec"
+                      >
+                        <Download size={14} /> Bajar Excel (.xlsx)
+                      </button>
+                    </div>
+
+                    <div
+                      tabIndex={0}
+                      role="region"
+                      aria-label="Matriz individual de asistencia"
+                      className="ugi-table-wrapper"
+                    >
+                      <table className="ugi-table">
+                        <thead>
+                          <tr>
+                            <th>Alumno</th>
+                            <th>Grupo</th>
+                            <th>Asist.</th>
+                            <th>Pres. / Total</th>
+                            {mostrarComidaAnalisis && <th>🍴 Comidas</th>}
+                            <th>Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cargandoAdmin ? (
+                            <tr>
+                              <td
+                                colSpan={mostrarComidaAnalisis ? 6 : 5}
+                                className="text-center py-6 text-slate-500"
+                              >
+                                Cargando datos...
+                              </td>
+                            </tr>
+                          ) : matrizAlumnos.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={mostrarComidaAnalisis ? 6 : 5}
+                                className="text-center py-6 text-slate-500"
+                              >
+                                Sin alumnos en este filtro.
+                              </td>
+                            </tr>
+                          ) : (
+                            matrizAlumnos.map((m) => (
+                              <tr key={m.id} className="hover:bg-slate-50">
+                                <td className="font-bold text-slate-900">{m.alumno}</td>
+                                <td className="text-slate-600 text-xs font-semibold">
+                                  {viendoAmbasAreas
+                                    ? `${m.area} · ${m.categoria}`
+                                    : m.categoria}
+                                </td>
+                                <td className="font-extrabold">
+                                  {m.pct !== null ? `${m.pct}%` : '-'}
+                                </td>
+                                <td className="text-slate-600">
+                                  {m.presentes} / {m.total}
+                                </td>
+                                {mostrarComidaAnalisis && (
+                                  <td className="text-slate-700 font-semibold">
+                                    {m.area === 'Colonia' ? `🍴 ${m.almuerzos}` : '—'}
+                                  </td>
+                                )}
+                                <td>
+                                  {m.pct === null ? (
+                                    <span className="ugi-pill a">– Sin datos</span>
+                                  ) : m.alerta ? (
+                                    <span className="ugi-pill r">⚠ Seguimiento</span>
+                                  ) : (
+                                    <span className="ugi-pill v">✓ Óptimo</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </section>
+        )}
+
+        {/* =====================================================================
+            PESTAÑA 4: CLAVES Y GOOGLE SHEETS (COORDINACIÓN Y DIRECCIÓN UGI)
+           ===================================================================== */}
+        {tabActiva === 'config' && esCoordOAdmin && (
+          <section aria-label="Configuración de contraseñas y Google Sheets">
+            {/* Contraseñas de Profe y Coordinación para Colonia y COYFD */}
+            <div className="ugi-card">
+              <h3>Contraseñas de acceso · Colonia y COYFD</h3>
+              <p className="ugi-hint">
+                Cada área tiene su contraseña de <b>Profe</b> y su contraseña de{' '}
+                <b>Coordinación</b>. Podés modificarlas cuando quieras.
+              </p>
+
+              <div
+                tabIndex={0}
+                role="region"
+                aria-label="Tabla de contraseñas de Colonia y COYFD"
+                className="ugi-table-wrapper"
+              >
+                <table className="ugi-table">
                   <thead>
-                    <tr className="border-b border-slate-200 text-slate-500 uppercase text-[10px]">
-                      <th className="py-1.5 pr-2">Deporte</th>
-                      <th className="py-1.5 px-2 text-center">PIN Profe</th>
-                      <th className="py-1.5 px-2 text-center">PIN Coordinador</th>
-                      <th className="py-1.5 px-2 text-center">Planilla Sheet</th>
-                      <th className="py-1.5 pl-2 text-right">Acción</th>
+                    <tr>
+                      <th>Área</th>
+                      <th>Comida</th>
+                      <th>Clave Profe</th>
+                      <th>Clave Coordinación</th>
+                      <th>Acción</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {DEPORTES_OFICIALES.map((d) => {
+                    {DEPORTES_OFICIALES.filter((d) =>
+                      rolSesion === 'admin' ? true : d.nombre === deporteSeleccionado
+                    ).map((d) => {
                       const info = pinsDeportes[d.nombre] || {
                         pin: d.pinDefault,
                         pinCoord: d.pinCoordDefault,
                       };
-                      const urlSheet = sheetUrlsPorDeporte[d.nombre];
                       const editando = deporteEditandoPin === d.nombre;
 
                       return (
-                        <tr key={d.nombre} className="border-b border-slate-100 hover:bg-white">
-                          <td className="py-2 pr-2 font-semibold text-slate-800">
-                            {d.nombre}{' '}
-                            <span className="text-[10px] text-slate-400">({d.tipo})</span>
+                        <tr key={d.nombre}>
+                          <td className="font-extrabold text-slate-900">{d.nombre}</td>
+                          <td>
+                            {d.tieneComida ? (
+                              <span className="ugi-pill v">🍴 Siempre activa</span>
+                            ) : (
+                              <span className="ugi-pill a">Sin comida</span>
+                            )}
                           </td>
-                          <td className="py-2 px-2 text-center font-mono">
+                          <td>
                             {editando ? (
                               <input
                                 type="text"
                                 value={inputEditPinProfe}
                                 onChange={(e) => setInputEditPinProfe(e.target.value)}
-                                className="w-16 text-center border border-slate-300 rounded px-1 py-0.5 text-xs font-mono"
+                                className="ugi-input"
+                                style={{ minHeight: '38px', maxWidth: '120px' }}
                               />
                             ) : (
-                              <span className="bg-blue-50 text-blue-800 px-2 py-0.5 rounded font-bold">
+                              <code className="bg-sky-50 text-blue-900 border border-sky-200 px-2.5 py-1 rounded-lg font-extrabold">
                                 {info.pin}
-                              </span>
+                              </code>
                             )}
                           </td>
-                          <td className="py-2 px-2 text-center font-mono">
+                          <td>
                             {editando ? (
                               <input
                                 type="text"
                                 value={inputEditPinCoord}
                                 onChange={(e) => setInputEditPinCoord(e.target.value)}
-                                className="w-16 text-center border border-slate-300 rounded px-1 py-0.5 text-xs font-mono"
+                                className="ugi-input"
+                                style={{ minHeight: '38px', maxWidth: '120px' }}
                               />
                             ) : (
-                              <span className="bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded font-bold">
+                              <code className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-2.5 py-1 rounded-lg font-extrabold">
                                 {info.pinCoord}
-                              </span>
+                              </code>
                             )}
                           </td>
-                          <td className="py-2 px-2 text-center">
-                            {urlSheet ? (
-                              <a
-                                href={urlSheet}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-emerald-700 hover:underline inline-flex items-center gap-1 font-semibold text-[11px]"
-                              >
-                                <ExternalLink size={12} /> Ver Sheet
-                              </a>
-                            ) : (
-                              <span className="text-slate-400 text-[11px]">No creado</span>
-                            )}
-                          </td>
-                          <td className="py-2 pl-2 text-right">
+                          <td>
                             {editando ? (
-                              <div className="flex gap-1 justify-end">
+                              <div className="flex gap-1.5">
                                 <button
                                   type="button"
                                   onClick={() => guardarPinsAdmin(d.nombre)}
-                                  className="bg-emerald-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-emerald-700"
+                                  className="ugi-btn ok"
+                                  style={{
+                                    width: 'auto',
+                                    minHeight: '36px',
+                                    padding: '0 12px',
+                                    fontSize: '0.78rem',
+                                  }}
                                 >
                                   Guardar
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setDeporteEditandoPin(null)}
-                                  className="bg-slate-200 text-slate-700 px-2 py-0.5 rounded text-[11px]"
+                                  className="ugi-btn-sec"
+                                  style={{ minHeight: '36px', padding: '0 10px' }}
                                 >
-                                  X
+                                  Cancelar
                                 </button>
                               </div>
                             ) : (
@@ -1301,9 +2906,10 @@ export default function AsistenciaApp() {
                                   setInputEditPinProfe(info.pin);
                                   setInputEditPinCoord(info.pinCoord);
                                 }}
-                                className="text-blue-600 hover:underline text-[11px] font-semibold"
+                                className="ugi-btn-sec"
+                                style={{ minHeight: '36px' }}
                               >
-                                Editar
+                                <Edit2 size={13} /> Cambiar claves
                               </button>
                             )}
                           </td>
@@ -1313,674 +2919,122 @@ export default function AsistenciaApp() {
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
-
-          {/* Resumen */}
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <div className="text-xs text-blue-700 font-medium flex items-center gap-1">
-                <Users size={14} /> Registros
-              </div>
-              <div className="text-2xl font-bold text-blue-900 mt-1">
-                {registrosFiltrados.length}
-              </div>
             </div>
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-              <div className="text-xs text-emerald-700 font-medium flex items-center gap-1">
-                <CheckCircle2 size={14} /> Asistencia ({pctAdmin}%)
-              </div>
-              <div className="text-2xl font-bold text-emerald-900 mt-1">{totalPresentes}</div>
-            </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <div className="text-xs text-amber-700 font-medium flex items-center gap-1">
-                <Utensils size={14} /> Almuerzos
-              </div>
-              <div className="text-2xl font-bold text-amber-900 mt-1">
-                {totalAlmuerzosAdmin}
-              </div>
-            </div>
-          </div>
 
-          {/* Tabla General */}
-          <div className="overflow-x-auto border border-slate-200 rounded-lg">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
-                  <th className="p-2.5">Fecha</th>
-                  <th className="p-2.5">Deporte / Colonia</th>
-                  <th className="p-2.5">Categoría</th>
-                  <th className="p-2.5">Alumno</th>
-                  <th className="p-2.5">Estado</th>
-                  <th className="p-2.5">Almuerzo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cargandoAdmin ? (
-                  <tr>
-                    <td colSpan={6} className="p-6 text-center text-slate-500">
-                      Cargando asistencias...
-                    </td>
-                  </tr>
-                ) : registrosFiltrados.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="p-6 text-center text-slate-500">
-                      No hay asistencias guardadas para este filtro.
-                    </td>
-                  </tr>
-                ) : (
-                  registrosFiltrados.map((r: any) => {
-                    const al = r.alumnos;
-                    const gr = al?.grupos;
-                    return (
-                      <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="p-2.5 font-medium text-slate-700">{r.fecha}</td>
-                        <td className="p-2.5 text-slate-700">{gr?.nombre}</td>
-                        <td className="p-2.5 text-slate-600">{gr?.categoria}</td>
-                        <td className="p-2.5 font-semibold text-slate-800">
-                          {al?.apellido}, {al?.nombre}
-                        </td>
-                        <td className="p-2.5">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                              r.estado === 'presente'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : r.estado === 'tarde'
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-rose-100 text-rose-800'
-                            }`}
-                          >
-                            {r.estado}
-                          </span>
-                        </td>
-                        <td className="p-2.5 text-slate-600">
-                          {gr?.tipo === 'colonia' ? (r.almuerzo ? '🍴 Sí' : 'No') : '-'}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </main>
-    );
-  }
+            {/* Planillas Google Sheets en Vivo */}
+            <div className="ugi-card">
+              <h3>Planillas Google Sheets en vivo (Colonia y COYFD)</h3>
+              <p className="ugi-hint">
+                Se actualizan automáticamente cada vez que un profe guarda la asistencia. En{' '}
+                <b>Colonia</b> incluye la columna de Almuerzos y en <b>COYFD</b> solo presentismo.
+              </p>
 
-  // ==========================================
-  // VISTA 2B: PANEL COORDINADOR POR DEPORTE / COLONIA
-  // ==========================================
-  if (vista === 'coordinador') {
-    const categoriasCoord = grupos.filter((g) => g.nombre === deporteSeleccionado);
-    const esColoniaCoord =
-      DEPORTES_OFICIALES.find((d) => d.nombre === deporteSeleccionado)?.tipo === 'colonia';
-
-    const registrosDeporte = registrosAdmin.filter(
-      (r: any) => r.alumnos?.grupos?.nombre === deporteSeleccionado
-    );
-    const registrosFiltradosCoord = registrosDeporte.filter((r: any) =>
-      filtroCategoriaCoord === 'TODAS'
-        ? true
-        : r.alumnos?.grupos?.categoria === filtroCategoriaCoord
-    );
-
-    const presentesCoord = registrosFiltradosCoord.filter(
-      (r) => r.estado === 'presente' || r.estado === 'tarde'
-    ).length;
-    const ausentesCoord = registrosFiltradosCoord.filter(
-      (r) => r.estado === 'ausente'
-    ).length;
-    const pctCoord =
-      registrosFiltradosCoord.length > 0
-        ? Math.round((presentesCoord / registrosFiltradosCoord.length) * 100)
-        : 0;
-    const almuerzosCoord = registrosFiltradosCoord.filter((r) => r.almuerzo).length;
-
-    return (
-      <main className="min-h-screen bg-slate-100 p-4 max-w-3xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm p-5 mb-4 border border-slate-200">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-            <button
-              onClick={cerrarSesionDeporte}
-              className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1"
-            >
-              <ArrowLeft size={14} /> Cambiar deporte / Cerrar sesión
-            </button>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setVista('profe')}
-                className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded font-semibold hover:bg-blue-100"
-              >
-                Ir a Tomar Asistencia (Modo Profe)
-              </button>
-              <span className="text-xs bg-indigo-700 text-white px-2.5 py-1 rounded font-bold uppercase">
-                COORDINACIÓN • {deporteSeleccionado}
-              </span>
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <h1 className="text-xl font-bold text-slate-800">
-              Panel Coordinador: {deporteSeleccionado}
-            </h1>
-            <p className="text-xs text-slate-500">
-              Todas las categorías de {deporteSeleccionado} con sus porcentajes en tu Google Sheet • UGI CCBA
-            </p>
-          </div>
-
-          {/* Tarjeta principal para vincular el mail del deporte y crear/abrir su Google Sheet */}
-          {renderTarjetaGoogleSheet(deporteSeleccionado)}
-
-          {/* Filtros del Coordinador */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end bg-slate-50 p-3 rounded-lg border border-slate-200 mb-5">
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Desde:</label>
-              <input
-                type="date"
-                value={fechaDesde}
-                onChange={(e) => setFechaDesde(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Hasta:</label>
-              <input
-                type="date"
-                value={fechaHasta}
-                onChange={(e) => setFechaHasta(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">
-                Categoría / Grupo:
-              </label>
-              <select
-                value={filtroCategoriaCoord}
-                onChange={(e) => setFiltroCategoriaCoord(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-              >
-                <option value="TODAS">Todas las categorías ({categoriasCoord.length})</option>
-                {categoriasCoord.map((c) => (
-                  <option key={c.id} value={c.categoria}>
-                    {c.categoria}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Tarjetas Resumen del Deporte */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <div className="text-xs text-blue-700 font-medium flex items-center gap-1">
-                <Users size={14} /> % Asistencia
-              </div>
-              <div className="text-2xl font-bold text-blue-900 mt-1">{pctCoord}%</div>
-            </div>
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-              <div className="text-xs text-emerald-700 font-medium flex items-center gap-1">
-                <CheckCircle2 size={14} /> Presentes / Tardes
-              </div>
-              <div className="text-2xl font-bold text-emerald-900 mt-1">{presentesCoord}</div>
-            </div>
-            <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
-              <div className="text-xs text-rose-700 font-medium flex items-center gap-1">
-                <XCircle size={14} /> Ausentes
-              </div>
-              <div className="text-2xl font-bold text-rose-900 mt-1">{ausentesCoord}</div>
-            </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <div className="text-xs text-amber-700 font-medium flex items-center gap-1">
-                <Utensils size={14} /> {esColoniaCoord ? 'Almuerzos' : 'Categorías'}
-              </div>
-              <div className="text-2xl font-bold text-amber-900 mt-1">
-                {esColoniaCoord ? almuerzosCoord : categoriasCoord.length}
-              </div>
-            </div>
-          </div>
-
-          {/* Resumen rápido por cada Categoría con su Porcentaje */}
-          {categoriasCoord.length > 0 && (
-            <div className="mb-5">
-              <h3 className="text-xs font-bold text-slate-600 uppercase mb-2">
-                Porcentaje de Asistencia por Categoría ({deporteSeleccionado})
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {categoriasCoord.map((cat) => {
-                  const regsCat = registrosDeporte.filter(
-                    (r: any) => r.alumnos?.grupos?.categoria === cat.categoria
-                  );
-                  const presCat = regsCat.filter(
-                    (r: any) => r.estado === 'presente' || r.estado === 'tarde'
-                  ).length;
-                  const pctCat =
-                    regsCat.length > 0 ? Math.round((presCat / regsCat.length) * 100) : null;
-                  const almCat = regsCat.filter((r: any) => r.almuerzo).length;
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                {DEPORTES_OFICIALES.map((d) => {
+                  const url = sheetUrlsPorDeporte[d.nombre];
                   return (
                     <div
-                      key={cat.id}
-                      onClick={() =>
-                        setFiltroCategoriaCoord(
-                          filtroCategoriaCoord === cat.categoria ? 'TODAS' : cat.categoria
-                        )
-                      }
-                      className={`cursor-pointer p-2.5 rounded-lg border text-xs transition-colors ${
-                        filtroCategoriaCoord === cat.categoria
-                          ? 'bg-indigo-50 border-indigo-400 text-indigo-900'
-                          : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                      }`}
+                      key={d.nombre}
+                      className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 flex flex-col justify-between gap-3"
                     >
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="font-bold truncate">{cat.categoria}</span>
-                        <span className="text-[11px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
-                          {pctCat !== null ? `${pctCat}%` : '-'}
-                        </span>
+                      <div>
+                        <div className="font-extrabold text-slate-900 text-sm flex items-center justify-between">
+                          <span>📊 Planilla {d.nombre}</span>
+                          <span className="text-[11px] font-bold text-slate-500">
+                            {d.tieneComida ? '🍴 Con almuerzos' : 'Sin comida'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {url
+                            ? 'Planilla creada y sincronizada en vivo.'
+                            : 'Tocá el botón para crear y abrir la planilla.'}
+                        </p>
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        Presentes: <b>{presCat}</b> / {regsCat.length}
-                        {esColoniaCoord ? ` • 🍴 ${almCat}` : ''}
+
+                      <div className="flex flex-wrap gap-2">
+                        {url ? (
+                          <>
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ugi-btn ok flex-1"
+                              style={{ minHeight: '42px', fontSize: '0.84rem' }}
+                            >
+                              <ExternalLink size={15} /> Abrir Sheet {d.nombre}
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                sincronizarGoogleSheetDeporte(d.nombre, true, false)
+                              }
+                              disabled={sincronizandoSheet}
+                              className="ugi-btn-sec"
+                              style={{ minHeight: '42px' }}
+                            >
+                              <RefreshCw
+                                size={14}
+                                className={sincronizandoSheet ? 'animate-spin' : ''}
+                              />
+                              Sincronizar
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              sincronizarGoogleSheetDeporte(d.nombre, false, true)
+                            }
+                            disabled={sincronizandoSheet}
+                            className="ugi-btn ok w-full"
+                            style={{ minHeight: '42px', fontSize: '0.84rem' }}
+                          >
+                            <ExternalLink size={15} /> Crear / Abrir Sheet {d.nombre}
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
                 })}
               </div>
-            </div>
-          )}
 
-          {/* Tabla de Todos los Grupos del Deporte */}
-          <div className="overflow-x-auto border border-slate-200 rounded-lg">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
-                  <th className="p-2.5">Fecha</th>
-                  <th className="p-2.5">Categoría / Grupo</th>
-                  <th className="p-2.5">Alumno</th>
-                  <th className="p-2.5">Estado</th>
-                  {esColoniaCoord && <th className="p-2.5">Almuerzo</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {cargandoAdmin ? (
-                  <tr>
-                    <td colSpan={5} className="p-6 text-center text-slate-500">
-                      Cargando asistencias de {deporteSeleccionado}...
-                    </td>
-                  </tr>
-                ) : registrosFiltradosCoord.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="p-6 text-center text-slate-500">
-                      No hay asistencias registradas en estas fechas para {deporteSeleccionado}.
-                    </td>
-                  </tr>
-                ) : (
-                  registrosFiltradosCoord.map((r: any) => {
-                    const al = r.alumnos;
-                    const gr = al?.grupos;
-                    return (
-                      <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="p-2.5 font-medium text-slate-700">{r.fecha}</td>
-                        <td className="p-2.5 font-semibold text-indigo-700">{gr?.categoria}</td>
-                        <td className="p-2.5 font-semibold text-slate-800">
-                          {al?.apellido}, {al?.nombre}
-                        </td>
-                        <td className="p-2.5">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                              r.estado === 'presente'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : r.estado === 'tarde'
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-rose-100 text-rose-800'
-                            }`}
-                          >
-                            {r.estado}
-                          </span>
-                        </td>
-                        {esColoniaCoord && (
-                          <td className="p-2.5 text-slate-600">
-                            {r.almuerzo ? '🍴 Sí' : 'No'}
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  // ==========================================
-  // VISTA 3: PANTALLA PRINCIPAL DE PROFES
-  // ==========================================
-  const categoriasDelDeporte = grupos.filter((g) => g.nombre === deporteSeleccionado);
-  const grupoActual = grupos.find((g) => g.id === Number(grupoSeleccionado));
-  const esColonia =
-    DEPORTES_OFICIALES.find((d) => d.nombre === deporteSeleccionado)?.tipo === 'colonia';
-  const totalAlmuerzos = Object.values(asistencias).filter((a) => a.almuerzo).length;
-  const totalPresentesHoy = alumnos.filter((al) => {
-    const est = asistencias[al.id]?.estado || 'presente';
-    return est === 'presente' || est === 'tarde';
-  }).length;
-  const pctHoy = alumnos.length > 0 ? Math.round((totalPresentesHoy / alumnos.length) * 100) : 0;
-
-  return (
-    <main className="min-h-screen bg-slate-100 p-4 max-w-xl mx-auto pb-24">
-      {/* Cabecera */}
-      <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-slate-200">
-        <div className="flex justify-between items-start mb-1">
-          <div className="w-6" />
-          <h1 className="text-lg font-bold text-slate-800 text-center">
-            Unidad de Gestión Integral - Asistencia
-          </h1>
-          <button
-            type="button"
-            onClick={() => setVista('login_admin')}
-            className="text-slate-400 hover:text-blue-600 transition-colors p-1"
-            title="Acceso Director UGI"
-          >
-            <ShieldAlert size={18} />
-          </button>
-        </div>
-        <p className="text-xs text-center text-slate-500 mb-4">
-          Control de Deportes y Colonia • Club Ciudad de Buenos Aires
-        </p>
-
-        {/* Bloque directo para que el deporte ponga su mail y cree/abra su propio Google Sheet */}
-        {renderTarjetaGoogleSheet(deporteSeleccionado)}
-
-        <div className="space-y-3">
-          {/* 1. Deporte Desbloqueado (Blindado por PIN) */}
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="text-xs font-semibold text-slate-600">
-                1. Deporte / Actividad habilitada:
-              </label>
-              <div className="flex items-center gap-3">
-                {esCoordinador && (
-                  <button
-                    type="button"
-                    onClick={() => setVista('coordinador')}
-                    className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded font-semibold hover:bg-indigo-100"
-                  >
-                    Panel Coordinador
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={cerrarSesionDeporte}
-                  className="text-xs text-blue-600 hover:underline flex items-center gap-1 font-semibold"
-                >
-                  <ArrowLeft size={12} /> Cambiar deporte / Salir
-                </button>
-              </div>
-            </div>
-            <div className="w-full bg-blue-50 border border-blue-200 rounded-lg p-2.5 text-sm text-blue-900 font-bold flex items-center justify-between">
-              <span>{deporteSeleccionado}</span>
-              <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded uppercase tracking-wider">
-                {esColonia ? 'COLONIA' : 'DEPORTE'}
-              </span>
-            </div>
-          </div>
-
-          {/* 2. Selector y Editor de Categoría */}
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="text-xs font-semibold text-slate-600">
-                2. Categoría / Grupo:
-              </label>
-              <div className="flex gap-2">
-                {grupoSeleccionado && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setModoCategoria('editar');
-                      setInputCategoria(grupoActual?.categoria || '');
-                    }}
-                    className="text-xs text-blue-600 hover:underline flex items-center gap-1 font-medium"
-                  >
-                    <Edit2 size={12} /> Editar nombre
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModoCategoria('crear');
-                    setInputCategoria('');
-                  }}
-                  className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200 hover:bg-blue-100 flex items-center gap-1 font-semibold"
-                >
-                  <Plus size={12} /> Nueva Categoría
-                </button>
-              </div>
-            </div>
-
-            {categoriasDelDeporte.length > 0 ? (
-              <select
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-sm text-slate-800"
-                value={grupoSeleccionado || ''}
-                onChange={(e) => setGrupoSeleccionado(Number(e.target.value))}
-              >
-                {categoriasDelDeporte.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.categoria}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-center">
-                Aún no hay categorías en <b>{deporteSeleccionado}</b>. Tocá{' '}
-                <b>&quot;+ Nueva Categoría&quot;</b> arriba para crear la tuya.
-              </div>
-            )}
-
-            {modoCategoria !== 'ninguno' && (
-              <div className="mt-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg flex gap-2 items-center">
-                <input
-                  type="text"
-                  placeholder="Ej: Sub 15, Formativa, Grupo 6 años..."
-                  value={inputCategoria}
-                  onChange={(e) => setInputCategoria(e.target.value)}
-                  className="flex-1 bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={guardarCategoria}
-                  className="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700"
-                >
-                  Guardar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setModoCategoria('ninguno')}
-                  className="text-xs text-slate-500 px-2 py-1 hover:text-slate-700"
-                >
-                  Cancelar
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* 3. Fecha */}
-          <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1">3. Fecha:</label>
-            <input
-              type="date"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-sm text-slate-800"
-            />
-          </div>
-        </div>
-
-        {/* Porcentaje del día de la categoría */}
-        {grupoSeleccionado && alumnos.length > 0 && (
-          <div className="mt-3 p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between text-xs text-slate-700">
-            <span>
-              Asistencia hoy en <b>{grupoActual?.categoria}</b>:
-            </span>
-            <span className="font-bold text-emerald-700">
-              {pctHoy}% ({totalPresentesHoy}/{alumnos.length})
-              {esColonia ? ` • 🍴 Almuerzan: ${totalAlmuerzos}` : ''}
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Agregar Alumnos */}
-      {grupoSeleccionado && (
-        <div className="mb-3">
-          <div className="flex justify-between items-center mb-2 px-1">
-            <span className="text-xs font-bold text-slate-600 uppercase">
-              Alumnos ({alumnos.length})
-            </span>
-            <button
-              type="button"
-              onClick={() => setMostrarFormAlumno(!mostrarFormAlumno)}
-              className="text-xs bg-white border border-slate-300 text-slate-700 px-2.5 py-1 rounded-lg shadow-xs hover:bg-slate-50 flex items-center gap-1 font-semibold"
-            >
-              <UserPlus size={14} /> {mostrarFormAlumno ? 'Cerrar carga' : 'Agregar Alumno'}
-            </button>
-          </div>
-
-          {mostrarFormAlumno && (
-            <form
-              onSubmit={agregarAlumno}
-              className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs mb-3 flex flex-col sm:flex-row gap-2"
-            >
-              <input
-                type="text"
-                placeholder="Apellido"
-                value={nuevoApellido}
-                onChange={(e) => setNuevoApellido(e.target.value)}
-                className="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
-                required
-              />
-              <input
-                type="text"
-                placeholder="Nombre"
-                value={nuevoNombre}
-                onChange={(e) => setNuevoNombre(e.target.value)}
-                className="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
-                required
-              />
-              <button
-                type="submit"
-                className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700"
-              >
-                + Sumar a la lista
-              </button>
-            </form>
-          )}
-        </div>
-      )}
-
-      {/* Lista de Alumnos */}
-      <div className="space-y-2">
-        {grupoSeleccionado && alumnos.length === 0 && (
-          <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
-            No hay alumnos cargados en <b>{grupoActual?.categoria}</b>. Tocá{' '}
-            <b>&quot;Agregar Alumno&quot;</b> para armar tu lista.
-          </div>
-        )}
-
-        {alumnos.map((al) => {
-          const actual = asistencias[al.id] || { estado: 'presente', almuerzo: false };
-
-          return (
-            <div
-              key={al.id}
-              className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs flex flex-col gap-2"
-            >
-              <div className="flex justify-between items-center">
-                <span className="font-semibold text-slate-700 text-sm">
-                  {al.apellido}, {al.nombre}
-                </span>
-
-                <div className="flex items-center gap-2">
-                  {esColonia && actual.estado !== 'ausente' && (
+              {rolSesion === 'admin' && (
+                <div className="pt-3 border-t border-slate-200">
+                  <label htmlFor="input-script-url" className="ugi-label">
+                    URL del Web App de Google Apps Script (/exec)
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      id="input-script-url"
+                      type="url"
+                      value={googleScriptUrl}
+                      onChange={(e) => setGoogleScriptUrl(e.target.value)}
+                      placeholder="https://script.google.com/macros/s/.../exec"
+                      className="ugi-input flex-1"
+                    />
                     <button
                       type="button"
-                      onClick={() => handleAlmuerzo(al.id)}
-                      className={`text-xs px-2.5 py-1 rounded-full flex items-center gap-1 font-medium border transition-colors ${
-                        actual.almuerzo
-                          ? 'bg-orange-500 text-white border-orange-600'
-                          : 'bg-slate-50 text-slate-600 border-slate-200'
-                      }`}
+                      onClick={guardarMotorEnSupabase}
+                      disabled={guardandoMotorGlobal}
+                      className="ugi-btn"
+                      style={{ width: 'auto', minHeight: '48px' }}
                     >
-                      <Utensils size={12} />
-                      {actual.almuerzo ? 'Almuerza' : 'Sin Almuerzo'}
+                      {guardandoMotorGlobal ? 'Guardando...' : 'Guardar URL'}
                     </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => eliminarAlumno(al.id, `${al.apellido}, ${al.nombre}`)}
-                    className="text-slate-300 hover:text-rose-500 p-1"
-                    title="Quitar alumno"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  </div>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleEstado(al.id, 'presente')}
-                  className={`py-1.5 text-xs font-semibold rounded-md flex justify-center items-center gap-1 ${
-                    actual.estado === 'presente'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <CheckCircle size={14} /> Presente
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleEstado(al.id, 'tarde')}
-                  className={`py-1.5 text-xs font-semibold rounded-md flex justify-center items-center gap-1 ${
-                    actual.estado === 'tarde'
-                      ? 'bg-amber-500 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <Clock size={14} /> Tarde
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleEstado(al.id, 'ausente')}
-                  className={`py-1.5 text-xs font-semibold rounded-md flex justify-center items-center gap-1 ${
-                    actual.estado === 'ausente'
-                      ? 'bg-rose-600 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <XCircle size={14} /> Ausente
-                </button>
-              </div>
+              )}
             </div>
-          );
-        })}
-      </div>
+          </section>
+        )}
+      </main>
 
-      {/* Barra Flotante Inferior (Sin Excel: guarda directo y actualiza Google Sheets) */}
-      <div className="fixed bottom-0 left-0 right-0 max-w-xl mx-auto p-3 bg-white border-t border-slate-200 flex gap-2">
-        <button
-          onClick={guardarAsistencias}
-          disabled={cargando || alumnos.length === 0}
-          className="flex-1 bg-blue-600 disabled:bg-slate-300 text-white py-2.5 rounded-lg text-sm font-bold shadow-xs hover:bg-blue-700 transition-colors"
-        >
-          {cargando ? 'Guardando y actualizando Sheet...' : 'Guardar Asistencia (actualiza Google Sheet)'}
-        </button>
-      </div>
-    </main>
+      {/* TOAST DE NOTIFICACIÓN ESTILO DEPORTES UGI */}
+      {toastMsg && (
+        <div role="status" aria-live="polite" className="ugi-toast">
+          {toastMsg}
+        </div>
+      )}
+    </div>
   );
 }
