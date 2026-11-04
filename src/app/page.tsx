@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 import {
@@ -64,6 +64,16 @@ const DEPORTES_OFICIALES = [
 
 const tieneOpcionComida = (nombreArea: string): boolean => nombreArea === 'Colonia';
 
+function obtenerFechaLocal(diasAtras = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() - diasAtras);
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
 interface Grupo {
   id: number;
   nombre: string;
@@ -79,9 +89,41 @@ interface Alumno {
   activo?: boolean;
 }
 
+interface AsistenciaRow {
+  id?: number;
+  fecha: string;
+  alumno_id: number;
+  estado: 'presente' | 'ausente' | 'tarde';
+  almuerzo: boolean;
+}
+
 interface AsistenciaState {
   estado: 'presente' | 'ausente' | 'tarde';
   almuerzo: boolean;
+}
+
+interface RegistroAdminRow {
+  id: number;
+  fecha: string;
+  estado: 'presente' | 'ausente' | 'tarde';
+  almuerzo: boolean;
+  alumno_id: number;
+  alumnos?: {
+    id: number;
+    nombre: string;
+    apellido: string;
+    grupo_id: number;
+    grupos?: Grupo | null;
+  } | null;
+}
+
+interface DeporteAuthRow {
+  deporte?: string;
+  pin?: string;
+  pin_coord?: string;
+  sheet_url?: string;
+  script_url?: string;
+  email_sheet?: string;
 }
 
 interface AlumnoImportado {
@@ -92,6 +134,7 @@ interface AlumnoImportado {
 
 type RolSesion = 'profe' | 'coordinador' | 'admin';
 type TabActiva = 'asistencia' | 'analisis' | 'padron' | 'config';
+type FilaTablaSheet = Record<string, string | number>;
 
 // Limpia viñetas, numeración y separa "Apellido, Nombre" o "Nombre Apellido"
 function parsearLineaAlumno(lineaRaw: string): { apellido: string; nombre: string } | null {
@@ -102,7 +145,6 @@ function parsearLineaAlumno(lineaRaw: string): { apellido: string; nombre: strin
 
   if (!limpia) return null;
 
-  // Si viene separado por tabulación (copiado de 2 columnas de Excel)
   if (lineaRaw.includes('\t')) {
     const cols = lineaRaw
       .split('\t')
@@ -116,7 +158,6 @@ function parsearLineaAlumno(lineaRaw: string): { apellido: string; nombre: strin
     }
   }
 
-  // Formato "Apellido, Nombre" o "Apellido; Nombre"
   if (limpia.includes(',') || limpia.includes(';')) {
     const sep = limpia.includes(',') ? ',' : ';';
     const partes = limpia.split(sep).map((p) => p.trim()).filter(Boolean);
@@ -126,7 +167,6 @@ function parsearLineaAlumno(lineaRaw: string): { apellido: string; nombre: strin
     }
   }
 
-  // Formato sin coma: "Apellido Nombre"
   const palabras = limpia.split(' ').filter(Boolean);
   if (palabras.length === 1) {
     if (/^(apellido|nombre|alumno|lista|grupo)$/i.test(palabras[0])) return null;
@@ -155,11 +195,11 @@ export default function AsistenciaColoniaCoyfdApp() {
   // Toast de notificación estilo Deportes UGI
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mostrarToast = (msg: string) => {
+  const mostrarToast = useCallback((msg: string) => {
     setToastMsg(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToastMsg(null), 2800);
-  };
+  }, []);
 
   // Grupos y Alumnos
   const [grupos, setGrupos] = useState<Grupo[]>([]);
@@ -174,7 +214,7 @@ export default function AsistenciaColoniaCoyfdApp() {
 
   // Asistencia diaria
   const [asistencias, setAsistencias] = useState<Record<number, AsistenciaState>>({});
-  const [fecha, setFecha] = useState<string>('');
+  const [fecha, setFecha] = useState<string>(() => obtenerFechaLocal(0));
   const [cargando, setCargando] = useState(false);
   const [estadoConexion, setEstadoConexion] = useState<'ok' | 'warn'>('ok');
 
@@ -194,11 +234,11 @@ export default function AsistenciaColoniaCoyfdApp() {
   const [grupoDestinoExcel, setGrupoDestinoExcel] = useState('');
 
   // Estados de Análisis / Asistencias Pasadas y Google Sheets
-  const [fechaDesde, setFechaDesde] = useState('');
-  const [fechaHasta, setFechaHasta] = useState('');
+  const [fechaDesde, setFechaDesde] = useState<string>(() => obtenerFechaLocal(30));
+  const [fechaHasta, setFechaHasta] = useState<string>(() => obtenerFechaLocal(0));
   const [filtroAreaAnalisis, setFiltroAreaAnalisis] = useState<string>('ACTUAL');
   const [filtroCategoriaCoord, setFiltroCategoriaCoord] = useState<string>('TODAS');
-  const [registrosAdmin, setRegistrosAdmin] = useState<any[]>([]);
+  const [registrosAdmin, setRegistrosAdmin] = useState<RegistroAdminRow[]>([]);
   const [alumnosAreaCompleta, setAlumnosAreaCompleta] = useState<Alumno[]>([]);
   const [cargandoAdmin, setCargandoAdmin] = useState(false);
 
@@ -218,66 +258,9 @@ export default function AsistenciaColoniaCoyfdApp() {
   const [inputEditPinCoord, setInputEditPinCoord] = useState('');
 
   // ============================================================================
-  // 2. INICIALIZACIÓN Y SESIÓN GUARDADA
+  // 2. FUNCIONES DE CARGA DESDE SUPABASE
   // ============================================================================
-  useEffect(() => {
-    const d = new Date();
-    const hoy = [
-      d.getFullYear(),
-      String(d.getMonth() + 1).padStart(2, '0'),
-      String(d.getDate()).padStart(2, '0'),
-    ].join('-');
-
-    const hace30 = new Date();
-    hace30.setDate(hace30.getDate() - 30);
-    const desde30 = [
-      hace30.getFullYear(),
-      String(hace30.getMonth() + 1).padStart(2, '0'),
-      String(hace30.getDate()).padStart(2, '0'),
-    ].join('-');
-
-    setFecha(hoy);
-    setFechaDesde(desde30);
-    setFechaHasta(hoy);
-
-    try {
-      const sheetsGuardados = localStorage.getItem('ugi_sheet_urls_colonia_coyfd_v2');
-      if (sheetsGuardados) setSheetUrlsPorDeporte(JSON.parse(sheetsGuardados));
-      const mailsGuardados = localStorage.getItem('ugi_sheet_emails_colonia_coyfd_v2');
-      if (mailsGuardados) setEmailsPorDeporte(JSON.parse(mailsGuardados));
-
-      const deporteGuardado = localStorage.getItem('ugi_deporte_logueado');
-      const rolGuardado = localStorage.getItem('ugi_rol_logueado') as RolSesion | null;
-      if (
-        deporteGuardado &&
-        (DEPORTES_OFICIALES.some((dep) => dep.nombre === deporteGuardado) ||
-          deporteGuardado === 'TODOS')
-      ) {
-        const areaReal = deporteGuardado === 'TODOS' ? 'Colonia' : deporteGuardado;
-        setAreaLogin(deporteGuardado);
-        setDeporteSeleccionado(areaReal);
-        if (rolGuardado === 'admin' || deporteGuardado === 'TODOS') {
-          setRolSesion('admin');
-          setFiltroAreaAnalisis('TODOS');
-          setLogueado(true);
-        } else if (rolGuardado === 'coordinador') {
-          setRolSesion('coordinador');
-          setFiltroAreaAnalisis('ACTUAL');
-          setLogueado(true);
-        } else if (rolGuardado === 'profe') {
-          setRolSesion('profe');
-          setFiltroAreaAnalisis('ACTUAL');
-          setLogueado(true);
-        }
-      }
-    } catch {
-      // Ignorar si localStorage no está disponible
-    }
-
-    cargarConfigAuthSupabase();
-  }, []);
-
-  const cargarConfigAuthSupabase = async () => {
+  const cargarConfigAuthSupabase = useCallback(async () => {
     const nombresPermitidos = DEPORTES_OFICIALES.map((d) => d.nombre);
     const { data, error } = await supabase
       .from('deportes_auth')
@@ -294,7 +277,7 @@ export default function AsistenciaColoniaCoyfdApp() {
       const mapaUrls: Record<string, string> = {};
       const mapaMails: Record<string, string> = {};
       const mapaPins: Record<string, { pin: string; pinCoord: string }> = {};
-      data.forEach((row: any) => {
+      (data as DeporteAuthRow[]).forEach((row) => {
         if (row.deporte) {
           mapaPins[row.deporte] = {
             pin: row.pin ? String(row.pin).trim() : '',
@@ -318,12 +301,9 @@ export default function AsistenciaColoniaCoyfdApp() {
         setEmailsPorDeporte((prev) => ({ ...prev, ...mapaMails }));
       }
     }
-  };
+  }, []);
 
-  // ============================================================================
-  // 3. CARGA DE GRUPOS, ALUMNOS Y ASISTENCIAS
-  // ============================================================================
-  const cargarGrupos = async (deporteActual: string, idSeleccionar?: number) => {
+  const cargarGrupos = useCallback(async (deporteActual: string, idSeleccionar?: number) => {
     const nombresPermitidos = DEPORTES_OFICIALES.map((d) => d.nombre);
     const { data, error } = await supabase
       .from('grupos')
@@ -338,39 +318,23 @@ export default function AsistenciaColoniaCoyfdApp() {
 
     setEstadoConexion('ok');
     if (data) {
-      setGrupos(data);
-      const filtrados = data.filter((g) => g.nombre === deporteActual);
+      const lista = data as Grupo[];
+      setGrupos(lista);
+      const filtrados = lista.filter((g) => g.nombre === deporteActual);
+      let nuevoGrupoId: number | null = null;
       if (idSeleccionar && filtrados.some((g) => g.id === idSeleccionar)) {
-        setGrupoSeleccionado(idSeleccionar);
+        nuevoGrupoId = idSeleccionar;
       } else if (filtrados.length > 0) {
-        setGrupoSeleccionado((prev) =>
-          prev && filtrados.some((g) => g.id === prev) ? prev : filtrados[0].id
-        );
-      } else {
-        setGrupoSeleccionado(null);
+        nuevoGrupoId = filtrados[0].id;
       }
+      setGrupoSeleccionado(nuevoGrupoId);
+      const grpSel = lista.find((g) => g.id === nuevoGrupoId);
+      setPadronCategoriaInput(grpSel?.categoria || '');
+      setGrupoDestinoExcel(grpSel?.categoria || '');
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    if (logueado) {
-      cargarGrupos(deporteSeleccionado);
-    }
-  }, [deporteSeleccionado, logueado]);
-
-  // Sincronizar nombre de categoría en el formulario de padrón
-  useEffect(() => {
-    const grp = grupos.find((g) => g.id === Number(grupoSeleccionado));
-    if (grp) {
-      setPadronCategoriaInput(grp.categoria);
-      setGrupoDestinoExcel(grp.categoria);
-    } else {
-      setPadronCategoriaInput('');
-      setGrupoDestinoExcel('');
-    }
-  }, [grupoSeleccionado, grupos]);
-
-  const cargarAlumnosYAsistencias = async () => {
+  const cargarAlumnosYAsistencias = useCallback(async () => {
     if (!fecha || !grupoSeleccionado) {
       setAlumnos([]);
       setAsistencias({});
@@ -387,8 +351,9 @@ export default function AsistenciaColoniaCoyfdApp() {
       .order('apellido');
 
     if (alumnosData) {
-      setAlumnos(alumnosData);
-      const ids = alumnosData.map((a) => a.id);
+      const listaAls = alumnosData as Alumno[];
+      setAlumnos(listaAls);
+      const ids = listaAls.map((a) => a.id);
 
       const mapaAsistencias: Record<number, AsistenciaState> = {};
       if (ids.length > 0) {
@@ -398,8 +363,9 @@ export default function AsistenciaColoniaCoyfdApp() {
           .eq('fecha', fecha)
           .in('alumno_id', ids);
 
-        alumnosData.forEach((al) => {
-          const existente = asistData?.find((a) => a.alumno_id === al.id);
+        const listaAsist = (asistData || []) as AsistenciaRow[];
+        listaAls.forEach((al) => {
+          const existente = listaAsist.find((a) => a.alumno_id === al.id);
           if (existente) {
             mapaAsistencias[al.id] = {
               estado: existente.estado,
@@ -412,16 +378,9 @@ export default function AsistenciaColoniaCoyfdApp() {
       }
       setAsistencias(mapaAsistencias);
     }
-  };
+  }, [fecha, grupoSeleccionado, deporteSeleccionado]);
 
-  useEffect(() => {
-    if (logueado) {
-      cargarAlumnosYAsistencias();
-    }
-  }, [grupoSeleccionado, fecha, deporteSeleccionado, logueado]);
-
-  // Cargar datos para la pestaña Asistencias Pasadas / Análisis
-  const cargarReporteMaestro = async () => {
+  const cargarReporteMaestro = useCallback(async () => {
     if (!fechaDesde || !fechaHasta) return;
     setCargandoAdmin(true);
 
@@ -458,25 +417,85 @@ export default function AsistenciaColoniaCoyfdApp() {
     ]);
 
     if (!asistRes.error && asistRes.data) {
-      const soloColoniaYCoyfd = asistRes.data.filter((r: any) =>
-        nombresPermitidos.includes(r.alumnos?.grupos?.nombre)
+      const filas = asistRes.data as unknown as RegistroAdminRow[];
+      const soloColoniaYCoyfd = filas.filter((r) =>
+        nombresPermitidos.includes(r.alumnos?.grupos?.nombre || '')
       );
       setRegistrosAdmin(soloColoniaYCoyfd);
     }
     if (!alumnosRes.error && alumnosRes.data) {
-      setAlumnosAreaCompleta(alumnosRes.data);
+      setAlumnosAreaCompleta(alumnosRes.data as Alumno[]);
     }
     setCargandoAdmin(false);
-  };
+  }, [fechaDesde, fechaHasta]);
+
+  // Restaurar sesión desde localStorage y traer configuración de Supabase
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const sheetsGuardados = localStorage.getItem('ugi_sheet_urls_colonia_coyfd_v2');
+        if (sheetsGuardados) setSheetUrlsPorDeporte(JSON.parse(sheetsGuardados));
+        const mailsGuardados = localStorage.getItem('ugi_sheet_emails_colonia_coyfd_v2');
+        if (mailsGuardados) setEmailsPorDeporte(JSON.parse(mailsGuardados));
+
+        const deporteGuardado = localStorage.getItem('ugi_deporte_logueado');
+        const rolGuardado = localStorage.getItem('ugi_rol_logueado') as RolSesion | null;
+        if (
+          deporteGuardado &&
+          (DEPORTES_OFICIALES.some((dep) => dep.nombre === deporteGuardado) ||
+            deporteGuardado === 'TODOS')
+        ) {
+          const areaReal = deporteGuardado === 'TODOS' ? 'Colonia' : deporteGuardado;
+          setAreaLogin(deporteGuardado);
+          setDeporteSeleccionado(areaReal);
+          if (rolGuardado === 'admin' || deporteGuardado === 'TODOS') {
+            setRolSesion('admin');
+            setFiltroAreaAnalisis('TODOS');
+            setLogueado(true);
+          } else if (rolGuardado === 'coordinador') {
+            setRolSesion('coordinador');
+            setFiltroAreaAnalisis('ACTUAL');
+            setLogueado(true);
+          } else if (rolGuardado === 'profe') {
+            setRolSesion('profe');
+            setFiltroAreaAnalisis('ACTUAL');
+            setLogueado(true);
+          }
+        }
+      } catch {
+        // Ignorar si localStorage no está disponible
+      }
+      void cargarConfigAuthSupabase();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [cargarConfigAuthSupabase]);
 
   useEffect(() => {
-    if (logueado && tabActiva === 'analisis') {
-      cargarReporteMaestro();
-    }
-  }, [logueado, tabActiva, fechaDesde, fechaHasta, deporteSeleccionado]);
+    if (!logueado) return;
+    const timer = setTimeout(() => {
+      void cargarGrupos(deporteSeleccionado);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [deporteSeleccionado, logueado, cargarGrupos]);
+
+  useEffect(() => {
+    if (!logueado) return;
+    const timer = setTimeout(() => {
+      void cargarAlumnosYAsistencias();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [logueado, cargarAlumnosYAsistencias]);
+
+  useEffect(() => {
+    if (!logueado || tabActiva !== 'analisis') return;
+    const timer = setTimeout(() => {
+      void cargarReporteMaestro();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [logueado, tabActiva, cargarReporteMaestro, deporteSeleccionado]);
 
   // ============================================================================
-  // 4. LOGIN CON CONTRASEÑA PARA PROFE, COORDINACIÓN Y DIRECCIÓN UGI
+  // 3. LOGIN CON CONTRASEÑA PARA PROFE, COORDINACIÓN Y DIRECCIÓN UGI
   // ============================================================================
   const ingresarApp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -499,16 +518,16 @@ export default function AsistenciaColoniaCoyfdApp() {
 
     setValidandoPin(false);
 
+    const listaFilasAuth = (filasAuth || []) as DeporteAuthRow[];
     const obtenerClavesArea = (nombreArea: string) => {
       const def = DEPORTES_OFICIALES.find((d) => d.nombre === nombreArea)!;
-      const fila = filasAuth?.find((r: any) => r.deporte === nombreArea);
+      const fila = listaFilasAuth.find((r) => r.deporte === nombreArea);
       return {
         profe: fila?.pin ? String(fila.pin).trim() : def.pinDefault,
         coord: fila?.pin_coord ? String(fila.pin_coord).trim() : def.pinCoordDefault,
       };
     };
 
-    // 1. Clave maestra de Dirección UGI
     if (clave.toLowerCase() === CLAVE_ADMIN) {
       const areaInicial = areaLogin === 'TODOS' ? 'Colonia' : areaLogin;
       try {
@@ -529,7 +548,6 @@ export default function AsistenciaColoniaCoyfdApp() {
       return;
     }
 
-    // 2. Validar clave de Profe o Coordinación para Colonia o COYFD
     const clavesActual = obtenerClavesArea(areaLogin);
     const otraArea = areaLogin === 'Colonia' ? 'COYFD' : 'Colonia';
     const clavesOtra = obtenerClavesArea(otraArea);
@@ -583,8 +601,17 @@ export default function AsistenciaColoniaCoyfdApp() {
     setModoCategoria('ninguno');
   };
 
+  const cambiarGrupoSeleccionado = (nuevoId: number) => {
+    setGrupoSeleccionado(nuevoId);
+    const grp = grupos.find((g) => g.id === nuevoId);
+    if (grp) {
+      setPadronCategoriaInput(grp.categoria);
+      setGrupoDestinoExcel(grp.categoria);
+    }
+  };
+
   // ============================================================================
-  // 5. GESTIÓN EXCLUSIVA DE COORDINACIÓN: GRUPOS, ALUMNOS Y BORRAR TODO
+  // 4. GESTIÓN EXCLUSIVA DE COORDINACIÓN: GRUPOS, ALUMNOS Y BORRAR TODO
   // ============================================================================
   const asegurarGrupoEnSupabase = async (
     nombreArea: string,
@@ -649,10 +676,11 @@ export default function AsistenciaColoniaCoyfdApp() {
       if (error) {
         mostrarToast('Error al crear grupo: ' + error.message);
       } else if (data) {
+        const nuevo = data as Grupo;
         setModoCategoria('ninguno');
         setInputCategoria('');
-        await cargarGrupos(deporteSeleccionado, data.id);
-        mostrarToast(`Grupo "${data.categoria}" creado`);
+        await cargarGrupos(deporteSeleccionado, nuevo.id);
+        mostrarToast(`Grupo "${nuevo.categoria}" creado`);
       }
     } else if (modoCategoria === 'editar' && grupoSeleccionado) {
       const { error } = await supabase
@@ -671,7 +699,6 @@ export default function AsistenciaColoniaCoyfdApp() {
     }
   };
 
-  // Eliminar un grupo específico y sus alumnos (solo Coordinación)
   const eliminarGrupoActual = async () => {
     const grp = grupos.find((g) => g.id === Number(grupoSeleccionado));
     if (!grp) return;
@@ -687,12 +714,11 @@ export default function AsistenciaColoniaCoyfdApp() {
       .from('alumnos')
       .select('id')
       .eq('grupo_id', grp.id);
-    const idsAls = (alsGrupo || []).map((a) => a.id);
+    const idsAls = (alsGrupo || []).map((a: { id: number }) => a.id);
 
     if (idsAls.length > 0) {
       await supabase.from('asistencias').delete().in('alumno_id', idsAls);
       await supabase.from('alumnos').delete().in('id', idsAls);
-      // Fallback por si RLS bloquea delete físico
       await supabase.from('alumnos').update({ activo: false }).in('id', idsAls);
     }
 
@@ -702,7 +728,6 @@ export default function AsistenciaColoniaCoyfdApp() {
     mostrarToast(`Grupo "${grp.categoria}" eliminado`);
   };
 
-  // BORRAR TODO el padrón, grupos y asistencias del área activa (solo Coordinación)
   const borrarTodoArea = async () => {
     if (
       !confirm(
@@ -726,7 +751,7 @@ export default function AsistenciaColoniaCoyfdApp() {
         .select('id')
         .eq('nombre', deporteSeleccionado);
 
-      const idsGrupos = (gruposDeporte || []).map((g) => g.id);
+      const idsGrupos = (gruposDeporte || []).map((g: { id: number }) => g.id);
 
       if (idsGrupos.length > 0) {
         const { data: alsDeporte } = await supabase
@@ -734,7 +759,7 @@ export default function AsistenciaColoniaCoyfdApp() {
           .select('id')
           .in('grupo_id', idsGrupos);
 
-        const idsAlumnos = (alsDeporte || []).map((a) => a.id);
+        const idsAlumnos = (alsDeporte || []).map((a: { id: number }) => a.id);
 
         if (idsAlumnos.length > 0) {
           await supabase.from('asistencias').delete().in('alumno_id', idsAlumnos);
@@ -758,7 +783,6 @@ export default function AsistenciaColoniaCoyfdApp() {
     }
   };
 
-  // Carga masiva pegando texto desde WhatsApp o Excel
   const cargarListadoMasivoTexto = async (e: React.FormEvent) => {
     e.preventDefault();
     const catDestino = padronCategoriaInput.trim();
@@ -792,7 +816,8 @@ export default function AsistenciaColoniaCoyfdApp() {
 
     const clavesActuales = new Set(
       (actuales || []).map(
-        (a) => `${a.apellido.trim().toLowerCase()}|${a.nombre.trim().toLowerCase()}`
+        (a: { apellido: string; nombre: string }) =>
+          `${a.apellido.trim().toLowerCase()}|${a.nombre.trim().toLowerCase()}`
       )
     );
 
@@ -837,7 +862,6 @@ export default function AsistenciaColoniaCoyfdApp() {
     }
   };
 
-  // Procesar archivo Excel (.xlsx, .xls) o CSV (.csv)
   const manejarArchivoExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -853,7 +877,10 @@ export default function AsistenciaColoniaCoyfdApp() {
       wb.SheetNames.forEach((sheetName) => {
         const sheet = wb.Sheets[sheetName];
         if (!sheet) return;
-        const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+        const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, {
+          header: 1,
+          defval: '',
+        });
         if (!rows || rows.length === 0) return;
 
         let idxGrupo = -1;
@@ -994,7 +1021,8 @@ export default function AsistenciaColoniaCoyfdApp() {
 
       const existentesSet = new Set(
         (actuales || []).map(
-          (a) => `${a.apellido.trim().toLowerCase()}|${a.nombre.trim().toLowerCase()}`
+          (a: { apellido: string; nombre: string }) =>
+            `${a.apellido.trim().toLowerCase()}|${a.nombre.trim().toLowerCase()}`
         )
       );
 
@@ -1046,7 +1074,6 @@ export default function AsistenciaColoniaCoyfdApp() {
     XLSX.writeFile(wb, `Plantilla_Listado_${deporteSeleccionado}.xlsx`);
   };
 
-  // Agregar Alumno Individual (solo Coordinación)
   const agregarAlumnoIndividual = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!grupoSeleccionado || !nuevoApellido.trim() || !nuevoNombre.trim()) return;
@@ -1071,7 +1098,6 @@ export default function AsistenciaColoniaCoyfdApp() {
     }
   };
 
-  // Dar de baja alumno (solo Coordinación)
   const eliminarAlumno = async (id: number, nombreCompleto: string) => {
     if (!confirm(`¿Quitar a ${nombreCompleto} de este grupo?`)) return;
     await supabase.from('alumnos').update({ activo: false }).eq('id', id);
@@ -1079,7 +1105,6 @@ export default function AsistenciaColoniaCoyfdApp() {
     mostrarToast(`${nombreCompleto} quitado`);
   };
 
-  // Vaciar grupo completo (solo Coordinación)
   const vaciarGrupoActual = async () => {
     const grp = grupos.find((g) => g.id === Number(grupoSeleccionado));
     if (!grp || alumnos.length === 0) return;
@@ -1096,7 +1121,7 @@ export default function AsistenciaColoniaCoyfdApp() {
   };
 
   // ============================================================================
-  // 6. TOMAR Y GUARDAR ASISTENCIA (CON COMIDA EN COLONIA Y SIN COMIDA EN COYFD)
+  // 5. TOMAR Y GUARDAR ASISTENCIA (CON COMIDA EN COLONIA Y SIN COMIDA EN COYFD)
   // ============================================================================
   const handleEstado = (id: number, nuevoEstado: 'presente' | 'ausente' | 'tarde') => {
     const permiteComida = tieneOpcionComida(deporteSeleccionado);
@@ -1189,13 +1214,13 @@ export default function AsistenciaColoniaCoyfdApp() {
     } else {
       mostrarToast(`✓ Asistencia de ${deporteSeleccionado} guardada`);
       if (googleScriptUrl.trim()) {
-        sincronizarGoogleSheetDeporte(deporteSeleccionado, false);
+        void sincronizarGoogleSheetDeporte(deporteSeleccionado, false);
       }
     }
   };
 
   // ============================================================================
-  // 7. SINCRONIZACIÓN CON GOOGLE SHEETS Y GESTIÓN DE CLAVES
+  // 6. SINCRONIZACIÓN CON GOOGLE SHEETS Y GESTIÓN DE CLAVES
   // ============================================================================
   const guardarPinsAdmin = async (deporte: string) => {
     const nuevoProfe = inputEditPinProfe.trim();
@@ -1265,10 +1290,10 @@ export default function AsistenciaColoniaCoyfdApp() {
         .eq('nombre', nombreDeporte)
         .order('categoria');
 
-      const listaGrupos = gruposDeporte || [];
+      const listaGrupos = (gruposDeporte || []) as Grupo[];
       const idsGrupos = listaGrupos.map((g) => g.id);
 
-      let alumnosDeporte: any[] = [];
+      let alumnosDeporte: Alumno[] = [];
       if (idsGrupos.length > 0) {
         const { data: als } = await supabase
           .from('alumnos')
@@ -1276,27 +1301,27 @@ export default function AsistenciaColoniaCoyfdApp() {
           .in('grupo_id', idsGrupos)
           .eq('activo', true)
           .order('apellido');
-        alumnosDeporte = als || [];
+        alumnosDeporte = (als || []) as Alumno[];
       }
 
       const idsAlumnos = alumnosDeporte.map((a) => a.id);
-      let asistenciasHist: any[] = [];
+      let asistenciasHist: AsistenciaRow[] = [];
       if (idsAlumnos.length > 0) {
         const { data: asistData } = await supabase
           .from('asistencias')
           .select('*')
           .in('alumno_id', idsAlumnos)
           .order('fecha', { ascending: true });
-        asistenciasHist = asistData || [];
+        asistenciasHist = (asistData || []) as AsistenciaRow[];
       }
 
       const mapaGrupoPorId = new Map(listaGrupos.map((g) => [g.id, g]));
 
       const construirTablaConPorcentajes = (
-        listaAlumnos: any[],
+        listaAlumnos: Alumno[],
         fechasColumnas: string[],
         etiquetaPromedio: string
-      ) => {
+      ): FilaTablaSheet[] => {
         if (listaAlumnos.length === 0) {
           return [
             {
@@ -1337,7 +1362,7 @@ export default function AsistenciaColoniaCoyfdApp() {
           const pctAlumno =
             totalDias > 0 ? `${Math.round(((presentes + tardes) / totalDias) * 100)}%` : '-';
 
-          const fila: Record<string, any> = {
+          const fila: FilaTablaSheet = {
             Categoría: gr?.categoria || '',
             Alumno: `${al.apellido}, ${al.nombre}`,
             '% Asistencia': pctAlumno,
@@ -1368,7 +1393,7 @@ export default function AsistenciaColoniaCoyfdApp() {
         const pctPromedioCategoria =
           sumaTotal > 0 ? `${Math.round((sumaPresTarde / sumaTotal) * 100)}%` : '-';
 
-        const filaPromedio: Record<string, any> = {
+        const filaPromedio: FilaTablaSheet = {
           Categoría: etiquetaPromedio,
           Alumno: `PROMEDIO / TOTAL (${listaAlumnos.length} alumnos)`,
           '% Asistencia': pctPromedioCategoria,
@@ -1408,7 +1433,7 @@ export default function AsistenciaColoniaCoyfdApp() {
       let totalRegsDeporte = 0;
       let totalAlmDeporte = 0;
 
-      const resumenCategorias = listaGrupos.map((gr) => {
+      const resumenCategorias: FilaTablaSheet[] = listaGrupos.map((gr) => {
         const alsGrupo = alumnosDeporte.filter((a) => a.grupo_id === gr.id);
         const idsAlsGrupo = new Set(alsGrupo.map((a) => a.id));
         const regsGrupo = asistenciasHist.filter((r) => idsAlsGrupo.has(r.alumno_id));
@@ -1430,7 +1455,7 @@ export default function AsistenciaColoniaCoyfdApp() {
         const pctAsist = total > 0 ? `${Math.round(((pres + tard) / total) * 100)}%` : '-';
         const pctAus = total > 0 ? `${Math.round((aus / total) * 100)}%` : '-';
 
-        const filaRes: Record<string, any> = {
+        const filaRes: FilaTablaSheet = {
           Categoría: gr.categoria,
           Alumnos: alsGrupo.length,
           'Días Cargados': fechasGrupo.length,
@@ -1455,7 +1480,7 @@ export default function AsistenciaColoniaCoyfdApp() {
           totalRegsDeporte > 0
             ? `${Math.round((totalAusDeporte / totalRegsDeporte) * 100)}%`
             : '-';
-        const filaTotalDeporte: Record<string, any> = {
+        const filaTotalDeporte: FilaTablaSheet = {
           Categoría: `PROMEDIO GENERAL ${nombreDeporte.toUpperCase()}`,
           Alumnos: totalAlumnosDeporte,
           'Días Cargados': Array.from(new Set(asistenciasHist.map((a) => a.fecha))).length,
@@ -1512,10 +1537,15 @@ export default function AsistenciaColoniaCoyfdApp() {
         }),
       });
 
-      const resJson = await resp.json();
+      const resJson = (await resp.json()) as {
+        ok?: boolean;
+        sheetUrl?: string;
+        error?: string;
+      };
       if (resJson && resJson.ok && resJson.sheetUrl) {
+        const urlRecibida = resJson.sheetUrl;
         setSheetUrlsPorDeporte((prev) => {
-          const nuevo = { ...prev, [nombreDeporte]: resJson.sheetUrl };
+          const nuevo = { ...prev, [nombreDeporte]: urlRecibida };
           try {
             localStorage.setItem('ugi_sheet_urls_colonia_coyfd_v2', JSON.stringify(nuevo));
           } catch {}
@@ -1525,14 +1555,14 @@ export default function AsistenciaColoniaCoyfdApp() {
         await supabase.from('deportes_auth').upsert(
           {
             deporte: nombreDeporte,
-            sheet_url: resJson.sheetUrl,
+            sheet_url: urlRecibida,
             script_url: urlDestino,
           },
           { onConflict: 'deporte' }
         );
 
         if (abrirAlTerminar) {
-          window.open(resJson.sheetUrl, '_blank', 'noopener,noreferrer');
+          window.open(urlRecibida, '_blank', 'noopener,noreferrer');
         } else if (mostrarAlerta) {
           mostrarToast(`Google Sheet de ${nombreDeporte} actualizado`);
         }
@@ -1549,12 +1579,13 @@ export default function AsistenciaColoniaCoyfdApp() {
   };
 
   // ============================================================================
-  // 8. PANTALLA DE LOGIN (ESTÉTICA DEPORTES UGI C.C.B.A.)
+  // 7. PANTALLA DE LOGIN (ESTÉTICA DEPORTES UGI C.C.B.A.)
   // ============================================================================
   if (!logueado) {
     return (
       <div className="ugi-login-screen">
         <form onSubmit={ingresarApp} className="ugi-login-card" method="POST">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/escudo-ccba.png"
             alt="Escudo Club Ciudad de Buenos Aires"
@@ -1637,7 +1668,7 @@ export default function AsistenciaColoniaCoyfdApp() {
   }
 
   // ============================================================================
-  // 9. VARIABLES DERIVADAS DE LA SESIÓN ACTIVA
+  // 8. VARIABLES DERIVADAS DE LA SESIÓN ACTIVA
   // ============================================================================
   const esCoordOAdmin = rolSesion === 'coordinador' || rolSesion === 'admin';
   const esColoniaActiva = tieneOpcionComida(deporteSeleccionado);
@@ -1689,6 +1720,7 @@ export default function AsistenciaColoniaCoyfdApp() {
       {/* CABECERA PRINCIPAL CON ESCUDO C.C.B.A. */}
       <header className="ugi-header">
         <div className="ugi-brand">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/escudo-ccba.png" alt="C.C.B.A." />
           <div>
             <h1>Unidad de Gestión Integral</h1>
@@ -1735,7 +1767,9 @@ export default function AsistenciaColoniaCoyfdApp() {
               {esCoordOAdmin && (
                 <button
                   type="button"
-                  onClick={() => sincronizarGoogleSheetDeporte(deporteSeleccionado, true, false)}
+                  onClick={() =>
+                    void sincronizarGoogleSheetDeporte(deporteSeleccionado, true, false)
+                  }
                   disabled={sincronizandoSheet}
                   className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-slate-100 border border-slate-300 px-2 py-1 rounded-lg hover:bg-slate-200"
                 >
@@ -1748,7 +1782,9 @@ export default function AsistenciaColoniaCoyfdApp() {
             esCoordOAdmin && (
               <button
                 type="button"
-                onClick={() => sincronizarGoogleSheetDeporte(deporteSeleccionado, false, true)}
+                onClick={() =>
+                  void sincronizarGoogleSheetDeporte(deporteSeleccionado, false, true)
+                }
                 disabled={sincronizandoSheet}
                 className="inline-flex items-center gap-1 text-xs font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg hover:bg-emerald-100"
               >
@@ -1766,7 +1802,7 @@ export default function AsistenciaColoniaCoyfdApp() {
       <main className="ugi-container">
         {/* PESTAÑAS DE NAVEGACIÓN:
             - PROFE: solo "Tomar Asistencia" y "Asistencias Pasadas"
-            - COORDINACIÓN / ADMIN: "Asistencia", "Análisis / Historial", "Listados / Padrón", "Claves y Sheets" */}
+            - COORDINACIÓN / ADMIN: "Asistencia", "Análisis", "Listados / Padrón", "Claves y Sheets" */}
         <div
           className="ugi-tabs"
           role="tablist"
@@ -1869,7 +1905,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                           </button>
                           <button
                             type="button"
-                            onClick={eliminarGrupoActual}
+                            onClick={() => void eliminarGrupoActual()}
                             className="text-xs font-bold text-red-600 hover:underline inline-flex items-center gap-1"
                             title="Eliminar este grupo"
                           >
@@ -1896,7 +1932,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                     id="sel-grupo"
                     className="ugi-select"
                     value={grupoSeleccionado || ''}
-                    onChange={(e) => setGrupoSeleccionado(Number(e.target.value))}
+                    onChange={(e) => cambiarGrupoSeleccionado(Number(e.target.value))}
                   >
                     {categoriasDelDeporte.map((cat) => (
                       <option key={cat.id} value={cat.id}>
@@ -1950,7 +1986,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                     {alumnos.length > 0 && (
                       <button
                         type="button"
-                        onClick={vaciarGrupoActual}
+                        onClick={() => void vaciarGrupoActual()}
                         className="ugi-quitar"
                         title="Quitar todos los alumnos de este grupo"
                       >
@@ -1962,7 +1998,6 @@ export default function AsistenciaColoniaCoyfdApp() {
               )}
             </div>
 
-            {/* Editor inline para crear o renombrar grupo (solo Coordinación) */}
             {esCoordOAdmin && modoCategoria !== 'ninguno' && (
               <div className="mt-3 p-3 bg-sky-50 border border-sky-200 rounded-xl flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
                 <input
@@ -1980,7 +2015,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={guardarCategoria}
+                    onClick={() => void guardarCategoria()}
                     className="ugi-btn"
                     style={{ width: 'auto', minHeight: '44px' }}
                   >
@@ -2216,7 +2251,7 @@ export default function AsistenciaColoniaCoyfdApp() {
               {alumnos.length > 0 && (
                 <button
                   type="button"
-                  onClick={guardarAsistencias}
+                  onClick={() => void guardarAsistencias()}
                   disabled={cargando}
                   className="ugi-btn ok mt-4"
                 >
@@ -2246,13 +2281,13 @@ export default function AsistenciaColoniaCoyfdApp() {
                 areaFiltro === 'TODOS' ? true : g.nombre === areaFiltro
               );
 
-              const registrosArea = registrosAdmin.filter((r: any) =>
+              const registrosArea = registrosAdmin.filter((r) =>
                 areaFiltro === 'TODOS'
                   ? true
                   : r.alumnos?.grupos?.nombre === areaFiltro
               );
 
-              const registrosFiltrados = registrosArea.filter((r: any) =>
+              const registrosFiltrados = registrosArea.filter((r) =>
                 filtroCategoriaCoord === 'TODAS'
                   ? true
                   : r.alumnos?.grupos?.categoria === filtroCategoriaCoord
@@ -2318,7 +2353,7 @@ export default function AsistenciaColoniaCoyfdApp() {
 
               const exportarExcelAnalisis = () => {
                 const filas = matrizAlumnos.map((m) => {
-                  const base: Record<string, any> = {
+                  const base: FilaTablaSheet = {
                     Área: m.area,
                     Grupo: m.categoria,
                     Alumno: m.alumno,
@@ -2481,10 +2516,10 @@ export default function AsistenciaColoniaCoyfdApp() {
                       <div className="space-y-3">
                         {gruposAnalisis.map((cat) => {
                           const regsCat = registrosArea.filter(
-                            (r: any) => r.alumnos?.grupos?.id === cat.id
+                            (r) => r.alumnos?.grupos?.id === cat.id
                           );
                           const presCat = regsCat.filter(
-                            (r: any) => r.estado === 'presente' || r.estado === 'tarde'
+                            (r) => r.estado === 'presente' || r.estado === 'tarde'
                           ).length;
                           const pctCat =
                             regsCat.length > 0
@@ -2492,7 +2527,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                               : 0;
                           const almCat =
                             cat.nombre === 'Colonia'
-                              ? regsCat.filter((r: any) => r.almuerzo).length
+                              ? regsCat.filter((r) => r.almuerzo).length
                               : 0;
                           const activo = filtroCategoriaCoord === cat.categoria;
                           const colorBarra =
@@ -2682,7 +2717,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                               </td>
                             </tr>
                           ) : (
-                            registrosFiltrados.map((r: any) => {
+                            registrosFiltrados.map((r) => {
                               const al = r.alumnos;
                               const gr = al?.grupos;
                               return (
@@ -2768,7 +2803,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                   ref={fileInputRef}
                   type="file"
                   accept=".xlsx,.xls,.csv"
-                  onChange={manejarArchivoExcel}
+                  onChange={(e) => void manejarArchivoExcel(e)}
                   className="sr-only"
                   id="input-archivo-excel"
                 />
@@ -2874,7 +2909,7 @@ export default function AsistenciaColoniaCoyfdApp() {
 
                   <button
                     type="button"
-                    onClick={confirmarImportacionExcel}
+                    onClick={() => void confirmarImportacionExcel()}
                     disabled={cargandoMasivo}
                     className="ugi-btn ok"
                   >
@@ -2887,7 +2922,7 @@ export default function AsistenciaColoniaCoyfdApp() {
             </div>
 
             {/* OPCIÓN 2: PEGAR LISTADO RÁPIDO DESDE WHATSAPP O EXCEL */}
-            <form onSubmit={cargarListadoMasivoTexto} className="ugi-card">
+            <form onSubmit={(e) => void cargarListadoMasivoTexto(e)} className="ugi-card">
               <h3>2. Pegar listado rápido (WhatsApp / Excel / Word)</h3>
               <p className="ugi-hint">
                 Pegá la lista con un alumno por renglón (ej: <b>Gómez, Juan</b> o{' '}
@@ -2964,7 +2999,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                 </p>
 
                 <form
-                  onSubmit={agregarAlumnoIndividual}
+                  onSubmit={(e) => void agregarAlumnoIndividual(e)}
                   className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4"
                 >
                   <input
@@ -3004,7 +3039,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => eliminarAlumno(al.id, `${al.apellido}, ${al.nombre}`)}
+                          onClick={() => void eliminarAlumno(al.id, `${al.apellido}, ${al.nombre}`)}
                           className="ugi-quitar inline-flex items-center gap-1"
                         >
                           <Trash2 size={13} /> Quitar
@@ -3032,7 +3067,7 @@ export default function AsistenciaColoniaCoyfdApp() {
 
                 <button
                   type="button"
-                  onClick={borrarTodoArea}
+                  onClick={() => void borrarTodoArea()}
                   disabled={borrandoTodo}
                   className="bg-red-600 hover:bg-red-700 disabled:bg-slate-400 text-white font-extrabold text-xs px-4 py-3 rounded-xl inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
                 >
@@ -3129,7 +3164,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                               <div className="flex gap-1.5">
                                 <button
                                   type="button"
-                                  onClick={() => guardarPinsAdmin(d.nombre)}
+                                  onClick={() => void guardarPinsAdmin(d.nombre)}
                                   className="ugi-btn ok"
                                   style={{
                                     width: 'auto',
@@ -3213,7 +3248,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                             <button
                               type="button"
                               onClick={() =>
-                                sincronizarGoogleSheetDeporte(d.nombre, true, false)
+                                void sincronizarGoogleSheetDeporte(d.nombre, true, false)
                               }
                               disabled={sincronizandoSheet}
                               className="ugi-btn-sec"
@@ -3230,7 +3265,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                           <button
                             type="button"
                             onClick={() =>
-                              sincronizarGoogleSheetDeporte(d.nombre, false, true)
+                              void sincronizarGoogleSheetDeporte(d.nombre, false, true)
                             }
                             disabled={sincronizandoSheet}
                             className="ugi-btn ok w-full"
@@ -3261,7 +3296,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                     />
                     <button
                       type="button"
-                      onClick={guardarMotorEnSupabase}
+                      onClick={() => void guardarMotorEnSupabase()}
                       disabled={guardandoMotorGlobal}
                       className="ugi-btn"
                       style={{ width: 'auto', minHeight: '48px' }}
