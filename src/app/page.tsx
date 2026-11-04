@@ -21,6 +21,8 @@ import {
   Search,
   ClipboardList,
   BarChart3,
+  History,
+  AlertTriangle,
 } from 'lucide-react';
 
 // ============================================================================
@@ -42,7 +44,7 @@ const SHEETS_POR_AREA_FIJOS: Record<string, string> = {
   COYFD: '',
 };
 
-// Configuración exclusiva para Colonia (con opción de comida siempre) y COYFD (sin comida)
+// Configuración exclusiva para Colonia (con comida) y COYFD (sin comida)
 const DEPORTES_OFICIALES = [
   {
     nombre: 'Colonia',
@@ -124,7 +126,7 @@ function parsearLineaAlumno(lineaRaw: string): { apellido: string; nombre: strin
     }
   }
 
-  // Formato sin coma: "Apellido Nombre" (si son 2+ palabras, tomamos la primera como Apellido y el resto como Nombre)
+  // Formato sin coma: "Apellido Nombre"
   const palabras = limpia.split(' ').filter(Boolean);
   if (palabras.length === 1) {
     if (/^(apellido|nombre|alumno|lista|grupo)$/i.test(palabras[0])) return null;
@@ -176,19 +178,22 @@ export default function AsistenciaColoniaCoyfdApp() {
   const [cargando, setCargando] = useState(false);
   const [estadoConexion, setEstadoConexion] = useState<'ok' | 'warn'>('ok');
 
-  // Carga ágil de listados (Padrón: Texto / WhatsApp + Archivo Excel / CSV)
+  // Carga ágil de listados (solo Coordinación)
   const [padronCategoriaInput, setPadronCategoriaInput] = useState('');
   const [padronTextoMasivo, setPadronTextoMasivo] = useState('');
   const [cargandoMasivo, setCargandoMasivo] = useState(false);
+  const [borrandoTodo, setBorrandoTodo] = useState(false);
 
   // Estado para subida de archivo Excel / CSV
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [archivoNombre, setArchivoNombre] = useState('');
   const [alumnosExcelPreview, setAlumnosExcelPreview] = useState<AlumnoImportado[]>([]);
-  const [modoImportExcel, setModoImportExcel] = useState<'grupo_actual' | 'por_columna_o_hoja'>('grupo_actual');
+  const [modoImportExcel, setModoImportExcel] = useState<'grupo_actual' | 'por_columna_o_hoja'>(
+    'grupo_actual'
+  );
   const [grupoDestinoExcel, setGrupoDestinoExcel] = useState('');
 
-  // Estados de Análisis, Coordinación y Google Sheets
+  // Estados de Análisis / Asistencias Pasadas y Google Sheets
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
   const [filtroAreaAnalisis, setFiltroAreaAnalisis] = useState<string>('ACTUAL');
@@ -261,6 +266,7 @@ export default function AsistenciaColoniaCoyfdApp() {
           setLogueado(true);
         } else if (rolGuardado === 'profe') {
           setRolSesion('profe');
+          setFiltroAreaAnalisis('ACTUAL');
           setLogueado(true);
         }
       }
@@ -414,7 +420,7 @@ export default function AsistenciaColoniaCoyfdApp() {
     }
   }, [grupoSeleccionado, fecha, deporteSeleccionado, logueado]);
 
-  // Cargar datos para la pestaña Análisis (Coordinación / Dirección UGI)
+  // Cargar datos para la pestaña Asistencias Pasadas / Análisis
   const cargarReporteMaestro = async () => {
     if (!fechaDesde || !fechaHasta) return;
     setCargandoAdmin(true);
@@ -502,7 +508,7 @@ export default function AsistenciaColoniaCoyfdApp() {
       };
     };
 
-    // 1. Si ingresó la clave maestra de Dirección UGI
+    // 1. Clave maestra de Dirección UGI
     if (clave.toLowerCase() === CLAVE_ADMIN) {
       const areaInicial = areaLogin === 'TODOS' ? 'Colonia' : areaLogin;
       try {
@@ -523,7 +529,7 @@ export default function AsistenciaColoniaCoyfdApp() {
       return;
     }
 
-    // 2. Validar clave de Profe o Coordinación para el área elegida (Colonia o COYFD)
+    // 2. Validar clave de Profe o Coordinación para Colonia o COYFD
     const clavesActual = obtenerClavesArea(areaLogin);
     const otraArea = areaLogin === 'Colonia' ? 'COYFD' : 'Colonia';
     const clavesOtra = obtenerClavesArea(otraArea);
@@ -550,6 +556,8 @@ export default function AsistenciaColoniaCoyfdApp() {
       } catch {}
       setDeporteSeleccionado(areaLogin);
       setRolSesion('profe');
+      setFiltroAreaAnalisis('ACTUAL');
+      setFiltroCategoriaCoord('TODAS');
       setTabActiva('asistencia');
       setInputPinDeporte('');
       setLogueado(true);
@@ -576,7 +584,7 @@ export default function AsistenciaColoniaCoyfdApp() {
   };
 
   // ============================================================================
-  // 5. GESTIÓN DE CATEGORÍAS / GRUPOS Y CARGA ÁGIL DE LISTADOS
+  // 5. GESTIÓN EXCLUSIVA DE COORDINACIÓN: GRUPOS, ALUMNOS Y BORRAR TODO
   // ============================================================================
   const asegurarGrupoEnSupabase = async (
     nombreArea: string,
@@ -592,7 +600,6 @@ export default function AsistenciaColoniaCoyfdApp() {
     );
     if (existente) return existente;
 
-    // Verificar en base de datos por si no estaba en estado local
     const { data: enDb } = await supabase
       .from('grupos')
       .select('*')
@@ -664,6 +671,93 @@ export default function AsistenciaColoniaCoyfdApp() {
     }
   };
 
+  // Eliminar un grupo específico y sus alumnos (solo Coordinación)
+  const eliminarGrupoActual = async () => {
+    const grp = grupos.find((g) => g.id === Number(grupoSeleccionado));
+    if (!grp) return;
+    if (
+      !confirm(
+        `¿Seguro que querés eliminar el grupo "${grp.categoria}" y todos sus alumnos de ${deporteSeleccionado}?`
+      )
+    ) {
+      return;
+    }
+
+    const { data: alsGrupo } = await supabase
+      .from('alumnos')
+      .select('id')
+      .eq('grupo_id', grp.id);
+    const idsAls = (alsGrupo || []).map((a) => a.id);
+
+    if (idsAls.length > 0) {
+      await supabase.from('asistencias').delete().in('alumno_id', idsAls);
+      await supabase.from('alumnos').delete().in('id', idsAls);
+      // Fallback por si RLS bloquea delete físico
+      await supabase.from('alumnos').update({ activo: false }).in('id', idsAls);
+    }
+
+    await supabase.from('grupos').delete().eq('id', grp.id);
+    await cargarGrupos(deporteSeleccionado);
+    await cargarAlumnosYAsistencias();
+    mostrarToast(`Grupo "${grp.categoria}" eliminado`);
+  };
+
+  // BORRAR TODO el padrón, grupos y asistencias del área activa (solo Coordinación)
+  const borrarTodoArea = async () => {
+    if (
+      !confirm(
+        `⚠️ ATENCIÓN COORDINACIÓN: ¿Seguro que querés BORRAR TODOS los grupos, alumnos y asistencias de ${deporteSeleccionado}? Esta acción dejará ${deporteSeleccionado} en cero.`
+      )
+    ) {
+      return;
+    }
+    if (
+      !confirm(
+        `Confirmación final: ¿Confirmás borrar absolutamente todo de ${deporteSeleccionado}?`
+      )
+    ) {
+      return;
+    }
+
+    setBorrandoTodo(true);
+    try {
+      const { data: gruposDeporte } = await supabase
+        .from('grupos')
+        .select('id')
+        .eq('nombre', deporteSeleccionado);
+
+      const idsGrupos = (gruposDeporte || []).map((g) => g.id);
+
+      if (idsGrupos.length > 0) {
+        const { data: alsDeporte } = await supabase
+          .from('alumnos')
+          .select('id')
+          .in('grupo_id', idsGrupos);
+
+        const idsAlumnos = (alsDeporte || []).map((a) => a.id);
+
+        if (idsAlumnos.length > 0) {
+          await supabase.from('asistencias').delete().in('alumno_id', idsAlumnos);
+          await supabase.from('alumnos').delete().in('id', idsAlumnos);
+          await supabase.from('alumnos').update({ activo: false }).in('id', idsAlumnos);
+        }
+
+        await supabase.from('grupos').delete().in('id', idsGrupos);
+      }
+
+      setGrupoSeleccionado(null);
+      setAlumnos([]);
+      setAsistencias({});
+      setRegistrosAdmin([]);
+      await cargarGrupos(deporteSeleccionado);
+      mostrarToast(`Se borró todo el contenido de ${deporteSeleccionado}`);
+    } catch {
+      mostrarToast('Ocurrió un error al intentar borrar todo');
+    } finally {
+      setBorrandoTodo(false);
+    }
+  };
+
   // Carga masiva pegando texto desde WhatsApp o Excel
   const cargarListadoMasivoTexto = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -690,7 +784,6 @@ export default function AsistenciaColoniaCoyfdApp() {
       return;
     }
 
-    // Traer alumnos actuales del grupo para no duplicar
     const { data: actuales } = await supabase
       .from('alumnos')
       .select('id, nombre, apellido')
@@ -763,7 +856,6 @@ export default function AsistenciaColoniaCoyfdApp() {
         const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
         if (!rows || rows.length === 0) return;
 
-        // Buscar fila de encabezado si existe
         let idxGrupo = -1;
         let idxApellido = -1;
         let idxNombre = -1;
@@ -820,7 +912,6 @@ export default function AsistenciaColoniaCoyfdApp() {
               nombre = parsed.nombre;
             }
           } else if (celdasNoVacias.length >= 2 && !celdasNoVacias[0].includes(',')) {
-            // Si hay 2 columnas sin encabezado claro: Col 0 = Apellido, Col 1 = Nombre
             const c0 = celdasNoVacias[0].replace(/^\d+\s*[.)\-:]?\s*/, '').trim();
             const c1 = celdasNoVacias[1].trim();
             if (/^(apellido|nombre|alumno|grupo|categor[ií]a)$/i.test(c0)) continue;
@@ -882,7 +973,6 @@ export default function AsistenciaColoniaCoyfdApp() {
     let totalInsertados = 0;
     let ultimoGrupoId: number | undefined;
 
-    // Agrupar por nombre de grupo destino
     const mapaPorGrupo = new Map<string, { apellido: string; nombre: string }[]>();
     alumnosExcelPreview.forEach((item) => {
       const gDestino =
@@ -956,7 +1046,7 @@ export default function AsistenciaColoniaCoyfdApp() {
     XLSX.writeFile(wb, `Plantilla_Listado_${deporteSeleccionado}.xlsx`);
   };
 
-  // Agregar Alumno Individual
+  // Agregar Alumno Individual (solo Coordinación)
   const agregarAlumnoIndividual = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!grupoSeleccionado || !nuevoApellido.trim() || !nuevoNombre.trim()) return;
@@ -981,7 +1071,7 @@ export default function AsistenciaColoniaCoyfdApp() {
     }
   };
 
-  // Dar de baja alumno
+  // Dar de baja alumno (solo Coordinación)
   const eliminarAlumno = async (id: number, nombreCompleto: string) => {
     if (!confirm(`¿Quitar a ${nombreCompleto} de este grupo?`)) return;
     await supabase.from('alumnos').update({ activo: false }).eq('id', id);
@@ -989,13 +1079,13 @@ export default function AsistenciaColoniaCoyfdApp() {
     mostrarToast(`${nombreCompleto} quitado`);
   };
 
-  // Vaciar grupo completo (por recambio de listado)
+  // Vaciar grupo completo (solo Coordinación)
   const vaciarGrupoActual = async () => {
     const grp = grupos.find((g) => g.id === Number(grupoSeleccionado));
     if (!grp || alumnos.length === 0) return;
     if (
       !confirm(
-        `¿Seguro que querés quitar a los ${alumnos.length} alumnos actuales de "${grp.categoria}" para cargar una lista nueva?`
+        `¿Seguro que querés quitar a los ${alumnos.length} alumnos actuales de "${grp.categoria}"?`
       )
     ) {
       return;
@@ -1027,7 +1117,6 @@ export default function AsistenciaColoniaCoyfdApp() {
     setAsistencias((prev) => {
       const actual = prev[id] || { estado: 'presente', almuerzo: false };
       const nuevoAlmuerzo = !actual.almuerzo;
-      // Si estaba ausente y le marcan comida, pasa automáticamente a presente
       const nuevoEstado =
         nuevoAlmuerzo && actual.estado === 'ausente' ? 'presente' : actual.estado;
       return {
@@ -1475,7 +1564,7 @@ export default function AsistenciaColoniaCoyfdApp() {
             <span className="ugi-login-pill">Club Ciudad de Buenos Aires</span>
           </div>
           <h1>Unidad de Gestión Integral</h1>
-          <p className="ugi-login-sub">Asistencia y listados · Colonia y COYFD</p>
+          <p className="ugi-login-sub">Asistencia y gestión · Colonia y COYFD</p>
 
           <div className="mb-3.5 text-left">
             <label htmlFor="login-area" className="ugi-label">
@@ -1491,7 +1580,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                 setLoginError('');
               }}
             >
-              <option value="Colonia">Colonia (con almuerzo / comida)</option>
+              <option value="Colonia">Colonia</option>
               <option value="COYFD">COYFD</option>
               <option value="TODOS">Dirección UGI (Colonia + COYFD)</option>
             </select>
@@ -1581,7 +1670,6 @@ export default function AsistenciaColoniaCoyfdApp() {
   const pctHoy =
     alumnos.length > 0 ? Math.round((totalPresentesHoy / alumnos.length) * 100) : 0;
 
-  // Cantidad de alumnos detectados en vivo en el textarea de carga masiva
   const cantidadDetectadaEnTexto = padronTextoMasivo
     .split(/\r?\n/)
     .map(parsearLineaAlumno)
@@ -1606,7 +1694,6 @@ export default function AsistenciaColoniaCoyfdApp() {
             <h1>Unidad de Gestión Integral</h1>
             <small>
               {deporteSeleccionado} · {etiquetaRol}
-              {esColoniaActiva ? ' · 🍴 Con Comida' : ' · Sin Comida'}
             </small>
           </div>
         </div>
@@ -1615,12 +1702,14 @@ export default function AsistenciaColoniaCoyfdApp() {
         </button>
       </header>
 
-      {/* BARRA DE ESTADO Y ACCESO DIRECTO AL GOOGLE SHEET */}
+      {/* BARRA DE ESTADO Y ACCESO AL GOOGLE SHEET */}
       <div className="ugi-estado flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <span
             className={
-              estadoConexion === 'ok' ? 'text-emerald-600 font-extrabold' : 'text-amber-600 font-extrabold'
+              estadoConexion === 'ok'
+                ? 'text-emerald-600 font-extrabold'
+                : 'text-amber-600 font-extrabold'
             }
           >
             ●
@@ -1643,35 +1732,41 @@ export default function AsistenciaColoniaCoyfdApp() {
               >
                 <ExternalLink size={12} /> Abrir Sheet {deporteSeleccionado}
               </a>
-              <button
-                type="button"
-                onClick={() => sincronizarGoogleSheetDeporte(deporteSeleccionado, true, false)}
-                disabled={sincronizandoSheet}
-                className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-slate-100 border border-slate-300 px-2 py-1 rounded-lg hover:bg-slate-200"
-              >
-                <RefreshCw size={12} className={sincronizandoSheet ? 'animate-spin' : ''} />
-                {sincronizandoSheet ? 'Sincronizando...' : 'Actualizar Sheet'}
-              </button>
+              {esCoordOAdmin && (
+                <button
+                  type="button"
+                  onClick={() => sincronizarGoogleSheetDeporte(deporteSeleccionado, true, false)}
+                  disabled={sincronizandoSheet}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-slate-100 border border-slate-300 px-2 py-1 rounded-lg hover:bg-slate-200"
+                >
+                  <RefreshCw size={12} className={sincronizandoSheet ? 'animate-spin' : ''} />
+                  {sincronizandoSheet ? 'Sincronizando...' : 'Actualizar Sheet'}
+                </button>
+              )}
             </>
           ) : (
-            <button
-              type="button"
-              onClick={() => sincronizarGoogleSheetDeporte(deporteSeleccionado, false, true)}
-              disabled={sincronizandoSheet}
-              className="inline-flex items-center gap-1 text-xs font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg hover:bg-emerald-100"
-            >
-              <ExternalLink size={12} />
-              {sincronizandoSheet
-                ? 'Generando Sheet...'
-                : `Crear / Abrir Sheet ${deporteSeleccionado}`}
-            </button>
+            esCoordOAdmin && (
+              <button
+                type="button"
+                onClick={() => sincronizarGoogleSheetDeporte(deporteSeleccionado, false, true)}
+                disabled={sincronizandoSheet}
+                className="inline-flex items-center gap-1 text-xs font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg hover:bg-emerald-100"
+              >
+                <ExternalLink size={12} />
+                {sincronizandoSheet
+                  ? 'Generando Sheet...'
+                  : `Crear / Abrir Sheet ${deporteSeleccionado}`}
+              </button>
+            )
           )}
         </div>
       </div>
 
       {/* CONTENEDOR CENTRAL */}
       <main className="ugi-container">
-        {/* PESTAÑAS DE NAVEGACIÓN ESTILO DEPORTES UGI */}
+        {/* PESTAÑAS DE NAVEGACIÓN:
+            - PROFE: solo "Tomar Asistencia" y "Asistencias Pasadas"
+            - COORDINACIÓN / ADMIN: "Asistencia", "Análisis / Historial", "Listados / Padrón", "Claves y Sheets" */}
         <div
           className="ugi-tabs"
           role="tablist"
@@ -1687,32 +1782,32 @@ export default function AsistenciaColoniaCoyfdApp() {
             className="ugi-tab"
           >
             <ClipboardList size={15} />
-            <span>Asistencia</span>
+            <span>{esCoordOAdmin ? 'Asistencia' : 'Tomar Asistencia'}</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === 'analisis'}
+            onClick={() => setTabActiva('analisis')}
+            className="ugi-tab"
+          >
+            {esCoordOAdmin ? <BarChart3 size={15} /> : <History size={15} />}
+            <span>{esCoordOAdmin ? 'Análisis' : 'Asistencias Pasadas'}</span>
           </button>
 
           {esCoordOAdmin && (
             <button
               type="button"
               role="tab"
-              aria-selected={tabActiva === 'analisis'}
-              onClick={() => setTabActiva('analisis')}
+              aria-selected={tabActiva === 'padron'}
+              onClick={() => setTabActiva('padron')}
               className="ugi-tab"
             >
-              <BarChart3 size={15} />
-              <span>Análisis</span>
+              <Upload size={15} />
+              <span>Listados / Padrón</span>
             </button>
           )}
-
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tabActiva === 'padron'}
-            onClick={() => setTabActiva('padron')}
-            className="ugi-tab"
-          >
-            <Upload size={15} />
-            <span>Listados / Padrón</span>
-          </button>
 
           {esCoordOAdmin && (
             <button
@@ -1728,10 +1823,9 @@ export default function AsistenciaColoniaCoyfdApp() {
           )}
         </div>
 
-        {/* TARJETA DE FILTROS EN CASCADA (ÁREA, CATEGORÍA/GRUPO Y FECHA) */}
-        {tabActiva !== 'config' && (
+        {/* TARJETA DE FILTROS EN CASCADA (ÁREA, GRUPO Y FECHA) */}
+        {(tabActiva === 'asistencia' || (tabActiva === 'padron' && esCoordOAdmin)) && (
           <div className="ugi-card">
-            {/* Si entró como Dirección UGI puede alternar entre Colonia y COYFD */}
             {rolSesion === 'admin' && (
               <div className="mb-3">
                 <label htmlFor="sel-area-activa" className="ugi-label">
@@ -1745,7 +1839,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                 >
                   {DEPORTES_OFICIALES.map((d) => (
                     <option key={d.nombre} value={d.nombre}>
-                      {d.nombre} {d.tieneComida ? '(Con opción de comida)' : '(Sin comida)'}
+                      {d.nombre}
                     </option>
                   ))}
                 </select>
@@ -1758,30 +1852,43 @@ export default function AsistenciaColoniaCoyfdApp() {
                   <label htmlFor="sel-grupo" className="ugi-label" style={{ marginBottom: 0 }}>
                     Grupo / Categoría ({deporteSeleccionado})
                   </label>
-                  <div className="flex items-center gap-2">
-                    {grupoSeleccionado && (
+                  {/* Crear / Renombrar / Eliminar grupo SOLO en Coordinación */}
+                  {esCoordOAdmin && (
+                    <div className="flex items-center gap-2">
+                      {grupoSeleccionado && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setModoCategoria('editar');
+                              setInputCategoria(grupoActual?.categoria || '');
+                            }}
+                            className="text-xs font-bold text-sky-700 hover:underline inline-flex items-center gap-1"
+                          >
+                            <Edit2 size={12} /> Renombrar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={eliminarGrupoActual}
+                            className="text-xs font-bold text-red-600 hover:underline inline-flex items-center gap-1"
+                            title="Eliminar este grupo"
+                          >
+                            <Trash2 size={12} /> Borrar grupo
+                          </button>
+                        </>
+                      )}
                       <button
                         type="button"
                         onClick={() => {
-                          setModoCategoria('editar');
-                          setInputCategoria(grupoActual?.categoria || '');
+                          setModoCategoria('crear');
+                          setInputCategoria('');
                         }}
-                        className="text-xs font-bold text-sky-700 hover:underline inline-flex items-center gap-1"
+                        className="text-xs font-extrabold text-blue-900 bg-sky-100 border border-sky-200 px-2 py-0.5 rounded-md hover:bg-sky-200 inline-flex items-center gap-1"
                       >
-                        <Edit2 size={12} /> Renombrar
+                        <Plus size={12} /> Nuevo grupo
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModoCategoria('crear');
-                        setInputCategoria('');
-                      }}
-                      className="text-xs font-extrabold text-blue-900 bg-sky-100 border border-sky-200 px-2 py-0.5 rounded-md hover:bg-sky-200 inline-flex items-center gap-1"
-                    >
-                      <Plus size={12} /> Nuevo grupo
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 {categoriasDelDeporte.length > 0 ? (
@@ -1799,8 +1906,17 @@ export default function AsistenciaColoniaCoyfdApp() {
                   </select>
                 ) : (
                   <div className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                    Sin grupos en <b>{deporteSeleccionado}</b>. Tocá <b>+ Nuevo grupo</b> o subí un
-                    listado en la pestaña <b>Listados / Padrón</b>.
+                    {esCoordOAdmin ? (
+                      <>
+                        Sin grupos en <b>{deporteSeleccionado}</b>. Tocá <b>+ Nuevo grupo</b> o
+                        subí un listado en la pestaña <b>Listados / Padrón</b>.
+                      </>
+                    ) : (
+                      <>
+                        No hay grupos cargados en <b>{deporteSeleccionado}</b>. Pedile a
+                        Coordinación que cargue los grupos y listados.
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -1808,7 +1924,7 @@ export default function AsistenciaColoniaCoyfdApp() {
               {tabActiva === 'asistencia' && (
                 <div>
                   <label htmlFor="input-fecha-sesion" className="ugi-label">
-                    Fecha de la sesión
+                    Fecha de la asistencia
                   </label>
                   <input
                     id="input-fecha-sesion"
@@ -1820,9 +1936,9 @@ export default function AsistenciaColoniaCoyfdApp() {
                 </div>
               )}
 
-              {tabActiva === 'padron' && (
+              {tabActiva === 'padron' && esCoordOAdmin && (
                 <div className="flex flex-col justify-end">
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-2">
                     <div>
                       <div className="text-xs font-extrabold text-slate-500 uppercase">
                         Alumnos en {grupoActual?.categoria || 'este grupo'}
@@ -1846,8 +1962,8 @@ export default function AsistenciaColoniaCoyfdApp() {
               )}
             </div>
 
-            {/* Editor inline para crear o renombrar grupo */}
-            {modoCategoria !== 'ninguno' && (
+            {/* Editor inline para crear o renombrar grupo (solo Coordinación) */}
+            {esCoordOAdmin && modoCategoria !== 'ninguno' && (
               <div className="mt-3 p-3 bg-sky-50 border border-sky-200 rounded-xl flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
                 <input
                   type="text"
@@ -1885,11 +2001,10 @@ export default function AsistenciaColoniaCoyfdApp() {
         )}
 
         {/* =====================================================================
-            PESTAÑA 1: ASISTENCIA (P / A / T + COMIDA SIEMPRE EN COLONIA)
+            PESTAÑA 1: TOMAR ASISTENCIA DEL DÍA
            ===================================================================== */}
         {tabActiva === 'asistencia' && (
           <section aria-label="Toma de asistencia">
-            {/* KPIs rápidos del día */}
             {grupoSeleccionado && alumnos.length > 0 && (
               <div
                 className="grid gap-2.5 mb-3.5"
@@ -1919,7 +2034,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                     <b className="truncate px-1 text-base sm:text-xl">
                       {grupoActual?.categoria || '-'}
                     </b>
-                    <span>COYFD (sin comida)</span>
+                    <span>COYFD</span>
                   </div>
                 )}
 
@@ -1937,7 +2052,7 @@ export default function AsistenciaColoniaCoyfdApp() {
                   <h3>Lista de asistencia · {grupoActual?.categoria || deporteSeleccionado}</h3>
                   <p className="ugi-hint" style={{ marginBottom: 0 }}>
                     P = Presente · A = Ausente · T = Tarde
-                    {esColoniaActiva ? ' · 🍴 = Se queda a comer en Colonia' : ''}
+                    {esColoniaActiva ? ' · 🍴 = Comida' : ''}
                   </p>
                 </div>
 
@@ -1972,7 +2087,6 @@ export default function AsistenciaColoniaCoyfdApp() {
                 </div>
               </div>
 
-              {/* Buscador rápido cuando el grupo tiene varios alumnos */}
               {alumnos.length > 5 && (
                 <div className="relative mb-3">
                   <Search
@@ -1990,20 +2104,30 @@ export default function AsistenciaColoniaCoyfdApp() {
                 </div>
               )}
 
-              {/* Listado de alumnos */}
               {!grupoSeleccionado || alumnos.length === 0 ? (
                 <div className="text-center py-6 px-3">
                   <p className="text-sm text-slate-500 mb-3">
-                    No hay alumnos cargados en{' '}
-                    <b>{grupoActual?.categoria || deporteSeleccionado}</b>.
+                    {esCoordOAdmin ? (
+                      <>
+                        No hay alumnos cargados en{' '}
+                        <b>{grupoActual?.categoria || deporteSeleccionado}</b>.
+                      </>
+                    ) : (
+                      <>
+                        No hay alumnos cargados en este grupo. Pedile a <b>Coordinación</b> que
+                        cargue el listado.
+                      </>
+                    )}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setTabActiva('padron')}
-                    className="ugi-btn-sec"
-                  >
-                    <Upload size={15} /> Ir a subir o pegar el listado del grupo
-                  </button>
+                  {esCoordOAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setTabActiva('padron')}
+                      className="ugi-btn-sec"
+                    >
+                      <Upload size={15} /> Ir a subir o pegar el listado del grupo
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div>
@@ -2031,7 +2155,6 @@ export default function AsistenciaColoniaCoyfdApp() {
                           role="group"
                           aria-label={`Asistencia de ${al.apellido}, ${al.nombre}`}
                         >
-                          {/* En Colonia SIEMPRE se muestra el botón de Comida */}
                           {esColoniaActiva && (
                             <button
                               type="button"
@@ -2108,10 +2231,516 @@ export default function AsistenciaColoniaCoyfdApp() {
         )}
 
         {/* =====================================================================
-            PESTAÑA 2: SUBIDA ÁGIL DE LISTADOS Y PADRÓN (PROFE Y COORDINACIÓN)
+            PESTAÑA 2: ASISTENCIAS PASADAS (PROFE) / ANÁLISIS (COORDINACIÓN)
            ===================================================================== */}
-        {tabActiva === 'padron' && (
-          <section aria-label="Carga ágil de listados y padrón">
+        {tabActiva === 'analisis' && (
+          <section aria-label="Asistencias pasadas y análisis">
+            {(() => {
+              const viendoAmbasAreas =
+                rolSesion === 'admin' && filtroAreaAnalisis === 'TODOS';
+              const areaFiltro = viendoAmbasAreas ? 'TODOS' : deporteSeleccionado;
+              const mostrarComidaAnalisis =
+                areaFiltro === 'Colonia' || areaFiltro === 'TODOS';
+
+              const gruposAnalisis = grupos.filter((g) =>
+                areaFiltro === 'TODOS' ? true : g.nombre === areaFiltro
+              );
+
+              const registrosArea = registrosAdmin.filter((r: any) =>
+                areaFiltro === 'TODOS'
+                  ? true
+                  : r.alumnos?.grupos?.nombre === areaFiltro
+              );
+
+              const registrosFiltrados = registrosArea.filter((r: any) =>
+                filtroCategoriaCoord === 'TODAS'
+                  ? true
+                  : r.alumnos?.grupos?.categoria === filtroCategoriaCoord
+              );
+
+              const presentesTot = registrosFiltrados.filter(
+                (r) => r.estado === 'presente' || r.estado === 'tarde'
+              ).length;
+              const ausentesTot = registrosFiltrados.filter(
+                (r) => r.estado === 'ausente'
+              ).length;
+              const pctAsist =
+                registrosFiltrados.length > 0
+                  ? Math.round((presentesTot / registrosFiltrados.length) * 100)
+                  : 0;
+              const almuerzosTot = registrosFiltrados.filter(
+                (r) => r.alumnos?.grupos?.nombre === 'Colonia' && r.almuerzo
+              ).length;
+
+              const idsGruposValidos = new Set(
+                gruposAnalisis
+                  .filter((g) =>
+                    filtroCategoriaCoord === 'TODAS'
+                      ? true
+                      : g.categoria === filtroCategoriaCoord
+                  )
+                  .map((g) => g.id)
+              );
+              const mapaGrupo = new Map(grupos.map((g) => [g.id, g]));
+
+              const matrizAlumnos = alumnosAreaCompleta
+                .filter((al) => idsGruposValidos.has(al.grupo_id))
+                .map((al) => {
+                  const gr = mapaGrupo.get(al.grupo_id);
+                  const regs = registrosFiltrados.filter((r) => r.alumno_id === al.id);
+                  const pres = regs.filter(
+                    (r) => r.estado === 'presente' || r.estado === 'tarde'
+                  ).length;
+                  const aus = regs.filter((r) => r.estado === 'ausente').length;
+                  const alm =
+                    gr?.nombre === 'Colonia'
+                      ? regs.filter((r) => r.almuerzo).length
+                      : 0;
+                  const pct =
+                    regs.length > 0 ? Math.round((pres / regs.length) * 100) : null;
+                  const alerta = pct !== null && pct < 70;
+                  return {
+                    id: al.id,
+                    alumno: `${al.apellido}, ${al.nombre}`,
+                    area: gr?.nombre || '',
+                    categoria: gr?.categoria || '',
+                    presentes: pres,
+                    ausentes: aus,
+                    almuerzos: alm,
+                    total: regs.length,
+                    pct,
+                    alerta,
+                  };
+                })
+                .sort((a, b) => (a.alerta === b.alerta ? 0 : a.alerta ? -1 : 1));
+
+              const totalAlertas = matrizAlumnos.filter((m) => m.alerta).length;
+
+              const exportarExcelAnalisis = () => {
+                const filas = matrizAlumnos.map((m) => {
+                  const base: Record<string, any> = {
+                    Área: m.area,
+                    Grupo: m.categoria,
+                    Alumno: m.alumno,
+                    '% Asistencia': m.pct !== null ? `${m.pct}%` : '-',
+                    Presentes: m.presentes,
+                    Ausentes: m.ausentes,
+                    'Clases Registradas': m.total,
+                  };
+                  if (mostrarComidaAnalisis) {
+                    base['Almuerzos (Colonia)'] =
+                      m.area === 'Colonia' ? m.almuerzos : '-';
+                  }
+                  base.Estado =
+                    m.pct === null
+                      ? 'Sin registros'
+                      : m.alerta
+                      ? 'Seguimiento (<70%)'
+                      : 'Óptimo';
+                  return base;
+                });
+                const ws = XLSX.utils.json_to_sheet(filas);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Matriz_Asistencia');
+                XLSX.writeFile(
+                  wb,
+                  `UGI_Asistencia_${areaFiltro}_${fechaDesde}_a_${fechaHasta}.xlsx`
+                );
+              };
+
+              return (
+                <>
+                  {/* Filtros de período y grupo */}
+                  <div className="ugi-card">
+                    <div
+                      className={`grid grid-cols-1 ${
+                        esCoordOAdmin ? 'sm:grid-cols-4' : 'sm:grid-cols-3'
+                      } gap-3`}
+                    >
+                      <div>
+                        <label htmlFor="f-desde" className="ugi-label">
+                          Desde
+                        </label>
+                        <input
+                          id="f-desde"
+                          type="date"
+                          value={fechaDesde}
+                          onChange={(e) => setFechaDesde(e.target.value)}
+                          className="ugi-input"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="f-hasta" className="ugi-label">
+                          Hasta
+                        </label>
+                        <input
+                          id="f-hasta"
+                          type="date"
+                          value={fechaHasta}
+                          onChange={(e) => setFechaHasta(e.target.value)}
+                          className="ugi-input"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="f-cat-coord" className="ugi-label">
+                          Grupo / Categoría
+                        </label>
+                        <select
+                          id="f-cat-coord"
+                          value={filtroCategoriaCoord}
+                          onChange={(e) => setFiltroCategoriaCoord(e.target.value)}
+                          className="ugi-select"
+                        >
+                          <option value="TODAS">
+                            Todos los grupos ({gruposAnalisis.length})
+                          </option>
+                          {gruposAnalisis.map((c) => (
+                            <option key={c.id} value={c.categoria}>
+                              {viendoAmbasAreas ? `${c.nombre} · ${c.categoria}` : c.categoria}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {rolSesion === 'admin' ? (
+                        <div>
+                          <label htmlFor="f-area-admin" className="ugi-label">
+                            Vista Dirección UGI
+                          </label>
+                          <select
+                            id="f-area-admin"
+                            value={filtroAreaAnalisis}
+                            onChange={(e) => {
+                              setFiltroAreaAnalisis(e.target.value);
+                              setFiltroCategoriaCoord('TODAS');
+                            }}
+                            className="ugi-select"
+                          >
+                            <option value="ACTUAL">Solo {deporteSeleccionado}</option>
+                            <option value="TODOS">Colonia + COYFD juntos</option>
+                          </select>
+                        </div>
+                      ) : esCoordOAdmin ? (
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={exportarExcelAnalisis}
+                            className="ugi-btn-sec w-full"
+                            style={{ minHeight: '48px' }}
+                          >
+                            <Download size={15} /> Bajar Excel
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Tarjetas de KPIs */}
+                  <div
+                    className="grid gap-2.5 mb-3.5"
+                    style={{
+                      gridTemplateColumns: mostrarComidaAnalisis
+                        ? 'repeat(4, 1fr)'
+                        : 'repeat(3, 1fr)',
+                    }}
+                  >
+                    <div className="ugi-kpi kpi-ok">
+                      <span>Asistencia</span>
+                      <b>{pctAsist}%</b>
+                      <span>{presentesTot} pres.</span>
+                    </div>
+
+                    <div className="ugi-kpi kpi-bad">
+                      <span>Ausentes</span>
+                      <b>{ausentesTot}</b>
+                      <span>en el período</span>
+                    </div>
+
+                    {mostrarComidaAnalisis && (
+                      <div className="ugi-kpi kpi-warn">
+                        <span>🍴 Almuerzos</span>
+                        <b>{almuerzosTot}</b>
+                        <span>en Colonia</span>
+                      </div>
+                    )}
+
+                    <div className="ugi-kpi">
+                      <span>Alertas (&lt;70%)</span>
+                      <b>{totalAlertas}</b>
+                      <span>seguimiento</span>
+                    </div>
+                  </div>
+
+                  {/* Porcentaje por Grupo (solo en Coordinación / Admin) */}
+                  {esCoordOAdmin && gruposAnalisis.length > 0 && (
+                    <div className="ugi-card">
+                      <h3>Porcentaje de asistencia por grupo</h3>
+                      <p className="ugi-hint">
+                        Tocá un grupo para filtrar las tablas de abajo.
+                      </p>
+                      <div className="space-y-3">
+                        {gruposAnalisis.map((cat) => {
+                          const regsCat = registrosArea.filter(
+                            (r: any) => r.alumnos?.grupos?.id === cat.id
+                          );
+                          const presCat = regsCat.filter(
+                            (r: any) => r.estado === 'presente' || r.estado === 'tarde'
+                          ).length;
+                          const pctCat =
+                            regsCat.length > 0
+                              ? Math.round((presCat / regsCat.length) * 100)
+                              : 0;
+                          const almCat =
+                            cat.nombre === 'Colonia'
+                              ? regsCat.filter((r: any) => r.almuerzo).length
+                              : 0;
+                          const activo = filtroCategoriaCoord === cat.categoria;
+                          const colorBarra =
+                            pctCat >= 80
+                              ? 'var(--ok)'
+                              : pctCat >= 70
+                              ? 'var(--sky)'
+                              : 'var(--bad)';
+
+                          return (
+                            <button
+                              key={cat.id}
+                              type="button"
+                              onClick={() =>
+                                setFiltroCategoriaCoord(activo ? 'TODAS' : cat.categoria)
+                              }
+                              className={`w-full text-left p-3 rounded-xl border transition-all ${
+                                activo
+                                  ? 'bg-sky-50 border-sky-400 shadow-xs'
+                                  : 'bg-slate-50/70 border-slate-200 hover:bg-white'
+                              }`}
+                            >
+                              <div className="flex justify-between items-center text-sm font-bold mb-1.5 gap-2">
+                                <span className="text-slate-900">
+                                  {viendoAmbasAreas
+                                    ? `${cat.nombre} · ${cat.categoria}`
+                                    : cat.categoria}
+                                </span>
+                                <span className="text-xs font-extrabold text-slate-700">
+                                  {regsCat.length > 0
+                                    ? `${pctCat}% (${presCat}/${regsCat.length})`
+                                    : 'Sin registros'}
+                                  {cat.nombre === 'Colonia' && regsCat.length > 0
+                                    ? ` · 🍴 ${almCat}`
+                                    : ''}
+                                </span>
+                              </div>
+                              <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                                <div
+                                  style={{
+                                    width: `${pctCat}%`,
+                                    background: colorBarra,
+                                  }}
+                                  className="h-full rounded-full transition-all"
+                                />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Matriz Individual de Alumnos */}
+                  <div className="ugi-card">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                      <div>
+                        <h3>Resumen de asistencia por alumno</h3>
+                        <p className="ugi-hint" style={{ marginBottom: 0 }}>
+                          Acumulado entre {fechaDesde} y {fechaHasta}.
+                        </p>
+                      </div>
+                      {esCoordOAdmin && (
+                        <button
+                          type="button"
+                          onClick={exportarExcelAnalisis}
+                          className="ugi-btn-sec"
+                        >
+                          <Download size={14} /> Bajar Excel (.xlsx)
+                        </button>
+                      )}
+                    </div>
+
+                    <div
+                      tabIndex={0}
+                      role="region"
+                      aria-label="Resumen individual de asistencia"
+                      className="ugi-table-wrapper"
+                    >
+                      <table className="ugi-table">
+                        <thead>
+                          <tr>
+                            <th>Alumno</th>
+                            <th>Grupo</th>
+                            <th>Asist.</th>
+                            <th>Pres. / Total</th>
+                            {mostrarComidaAnalisis && <th>🍴 Comidas</th>}
+                            <th>Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cargandoAdmin ? (
+                            <tr>
+                              <td
+                                colSpan={mostrarComidaAnalisis ? 6 : 5}
+                                className="text-center py-6 text-slate-500"
+                              >
+                                Cargando asistencias...
+                              </td>
+                            </tr>
+                          ) : matrizAlumnos.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={mostrarComidaAnalisis ? 6 : 5}
+                                className="text-center py-6 text-slate-500"
+                              >
+                                Sin alumnos en este filtro.
+                              </td>
+                            </tr>
+                          ) : (
+                            matrizAlumnos.map((m) => (
+                              <tr key={m.id} className="hover:bg-slate-50">
+                                <td className="font-bold text-slate-900">{m.alumno}</td>
+                                <td className="text-slate-600 text-xs font-semibold">
+                                  {viendoAmbasAreas
+                                    ? `${m.area} · ${m.categoria}`
+                                    : m.categoria}
+                                </td>
+                                <td className="font-extrabold">
+                                  {m.pct !== null ? `${m.pct}%` : '-'}
+                                </td>
+                                <td className="text-slate-600">
+                                  {m.presentes} / {m.total}
+                                </td>
+                                {mostrarComidaAnalisis && (
+                                  <td className="text-slate-700 font-semibold">
+                                    {m.area === 'Colonia' ? `🍴 ${m.almuerzos}` : '—'}
+                                  </td>
+                                )}
+                                <td>
+                                  {m.pct === null ? (
+                                    <span className="ugi-pill a">– Sin datos</span>
+                                  ) : m.alerta ? (
+                                    <span className="ugi-pill r">⚠ Seguimiento</span>
+                                  ) : (
+                                    <span className="ugi-pill v">✓ Óptimo</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Detalle día por día de asistencias pasadas */}
+                  <div className="ugi-card">
+                    <h3>Registro detallado día por día ({registrosFiltrados.length})</h3>
+                    <p className="ugi-hint">
+                      Historial de asistencias tomadas en las fechas seleccionadas.
+                    </p>
+
+                    <div
+                      tabIndex={0}
+                      role="region"
+                      aria-label="Historial detallado de asistencias"
+                      className="ugi-table-wrapper"
+                    >
+                      <table className="ugi-table">
+                        <thead>
+                          <tr>
+                            <th>Fecha</th>
+                            <th>Grupo</th>
+                            <th>Alumno</th>
+                            <th>Estado</th>
+                            {mostrarComidaAnalisis && <th>🍴 Comida</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cargandoAdmin ? (
+                            <tr>
+                              <td
+                                colSpan={mostrarComidaAnalisis ? 5 : 4}
+                                className="text-center py-6 text-slate-500"
+                              >
+                                Cargando historial...
+                              </td>
+                            </tr>
+                          ) : registrosFiltrados.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={mostrarComidaAnalisis ? 5 : 4}
+                                className="text-center py-6 text-slate-500"
+                              >
+                                No hay asistencias cargadas en este rango de fechas.
+                              </td>
+                            </tr>
+                          ) : (
+                            registrosFiltrados.map((r: any) => {
+                              const al = r.alumnos;
+                              const gr = al?.grupos;
+                              return (
+                                <tr key={r.id} className="hover:bg-slate-50">
+                                  <td className="font-semibold text-slate-700">{r.fecha}</td>
+                                  <td className="text-xs font-semibold text-slate-600">
+                                    {viendoAmbasAreas
+                                      ? `${gr?.nombre} · ${gr?.categoria}`
+                                      : gr?.categoria}
+                                  </td>
+                                  <td className="font-bold text-slate-900">
+                                    {al?.apellido}, {al?.nombre}
+                                  </td>
+                                  <td>
+                                    <span
+                                      className={`ugi-pill ${
+                                        r.estado === 'presente'
+                                          ? 'v'
+                                          : r.estado === 'tarde'
+                                          ? 'a'
+                                          : 'r'
+                                      }`}
+                                    >
+                                      {r.estado === 'presente'
+                                        ? 'Presente'
+                                        : r.estado === 'tarde'
+                                        ? 'Tarde'
+                                        : 'Ausente'}
+                                    </span>
+                                  </td>
+                                  {mostrarComidaAnalisis && (
+                                    <td className="text-slate-700 font-semibold">
+                                      {gr?.nombre === 'Colonia'
+                                        ? r.almuerzo
+                                          ? '🍴 Sí'
+                                          : 'No'
+                                        : '—'}
+                                    </td>
+                                  )}
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </section>
+        )}
+
+        {/* =====================================================================
+            PESTAÑA 3: SUBIDA ÁGIL DE LISTADOS, PADRÓN Y BORRAR TODO (SOLO COORDINACIÓN)
+           ===================================================================== */}
+        {tabActiva === 'padron' && esCoordOAdmin && (
+          <section aria-label="Carga ágil de listados y padrón (Exclusivo Coordinación)">
             {/* OPCIÓN 1: SUBIR ARCHIVO EXCEL (.XLSX / .XLS) O CSV */}
             <div className="ugi-card">
               <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
@@ -2154,12 +2783,12 @@ export default function AsistenciaColoniaCoyfdApp() {
                       : 'Tocá acá para elegir tu archivo Excel (.xlsx, .xls) o CSV'}
                   </span>
                   <span className="text-xs text-slate-500 mt-0.5">
-                    Podés subir un grupo solo o toda la Colonia / COYFD junta en un mismo archivo
+                    Podés subir un grupo solo o toda la {deporteSeleccionado} junta en un mismo
+                    archivo
                   </span>
                 </label>
               </div>
 
-              {/* Vista previa e importación en 1 clic cuando se selecciona un Excel */}
               {alumnosExcelPreview.length > 0 && (
                 <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -2257,7 +2886,7 @@ export default function AsistenciaColoniaCoyfdApp() {
               )}
             </div>
 
-            {/* OPCIÓN 2: PEGAR LISTADO RÁPIDO DESDE WHATSAPP O EXCEL (IGUAL A APP DEPORTES) */}
+            {/* OPCIÓN 2: PEGAR LISTADO RÁPIDO DESDE WHATSAPP O EXCEL */}
             <form onSubmit={cargarListadoMasivoTexto} className="ugi-card">
               <h3>2. Pegar listado rápido (WhatsApp / Excel / Word)</h3>
               <p className="ugi-hint">
@@ -2294,7 +2923,11 @@ export default function AsistenciaColoniaCoyfdApp() {
 
               <div className="mb-3">
                 <div className="flex justify-between items-center mb-1">
-                  <label htmlFor="padron-lista-textarea" className="ugi-label" style={{ marginBottom: 0 }}>
+                  <label
+                    htmlFor="padron-lista-textarea"
+                    className="ugi-label"
+                    style={{ marginBottom: 0 }}
+                  >
                     Alumnos (uno por línea)
                   </label>
                   {cantidadDetectadaEnTexto > 0 && (
@@ -2320,14 +2953,14 @@ export default function AsistenciaColoniaCoyfdApp() {
               </button>
             </form>
 
-            {/* OPCIÓN 3: SUMAR UN ALUMNO INDIVIDUAL Y ADMINISTRAR EL PLANTEL ACTUAL */}
+            {/* OPCIÓN 3: SUMAR O QUITAR ALUMNOS DEL GRUPO ACTUAL */}
             {grupoSeleccionado && (
               <div className="ugi-card">
                 <h3>
                   3. Plantel actual de {grupoActual?.categoria} ({alumnos.length})
                 </h3>
                 <p className="ugi-hint">
-                  También podés sumar un alumno individualmente o dar de baja del listado.
+                  Agregá o quitá alumnos individualmente de este grupo.
                 </p>
 
                 <form
@@ -2382,415 +3015,34 @@ export default function AsistenciaColoniaCoyfdApp() {
                 )}
               </div>
             )}
-          </section>
-        )}
 
-        {/* =====================================================================
-            PESTAÑA 3: ANÁLISIS Y SEGUIMIENTO (COORDINACIÓN Y DIRECCIÓN UGI)
-           ===================================================================== */}
-        {tabActiva === 'analisis' && esCoordOAdmin && (
-          <section aria-label="Análisis de asistencia y seguimiento">
-            {(() => {
-              const viendoAmbasAreas =
-                rolSesion === 'admin' && filtroAreaAnalisis === 'TODOS';
-              const areaFiltro = viendoAmbasAreas ? 'TODOS' : deporteSeleccionado;
-              const mostrarComidaAnalisis =
-                areaFiltro === 'Colonia' || areaFiltro === 'TODOS';
+            {/* ZONA DE REINICIO / BORRAR TODO (EXCLUSIVO COORDINACIÓN) */}
+            <div className="ugi-card border-red-200 bg-red-50/40">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-red-900 flex items-center gap-1.5">
+                    <AlertTriangle size={17} className="text-red-600" />
+                    Reiniciar / Borrar todo ({deporteSeleccionado})
+                  </h3>
+                  <p className="ugi-hint" style={{ marginBottom: 0 }}>
+                    Elimina todos los grupos, listados de alumnos y asistencias de{' '}
+                    <b>{deporteSeleccionado}</b> para comenzar desde cero.
+                  </p>
+                </div>
 
-              const gruposAnalisis = grupos.filter((g) =>
-                areaFiltro === 'TODOS' ? true : g.nombre === areaFiltro
-              );
-
-              const registrosArea = registrosAdmin.filter((r: any) =>
-                areaFiltro === 'TODOS'
-                  ? true
-                  : r.alumnos?.grupos?.nombre === areaFiltro
-              );
-
-              const registrosFiltrados = registrosArea.filter((r: any) =>
-                filtroCategoriaCoord === 'TODAS'
-                  ? true
-                  : r.alumnos?.grupos?.categoria === filtroCategoriaCoord
-              );
-
-              const presentesTot = registrosFiltrados.filter(
-                (r) => r.estado === 'presente' || r.estado === 'tarde'
-              ).length;
-              const ausentesTot = registrosFiltrados.filter(
-                (r) => r.estado === 'ausente'
-              ).length;
-              const pctAsist =
-                registrosFiltrados.length > 0
-                  ? Math.round((presentesTot / registrosFiltrados.length) * 100)
-                  : 0;
-              const almuerzosTot = registrosFiltrados.filter(
-                (r) => r.alumnos?.grupos?.nombre === 'Colonia' && r.almuerzo
-              ).length;
-
-              // Construir matriz individual por alumno del área/grupo seleccionado
-              const idsGruposValidos = new Set(
-                gruposAnalisis
-                  .filter((g) =>
-                    filtroCategoriaCoord === 'TODAS'
-                      ? true
-                      : g.categoria === filtroCategoriaCoord
-                  )
-                  .map((g) => g.id)
-              );
-              const mapaGrupo = new Map(grupos.map((g) => [g.id, g]));
-
-              const matrizAlumnos = alumnosAreaCompleta
-                .filter((al) => idsGruposValidos.has(al.grupo_id))
-                .map((al) => {
-                  const gr = mapaGrupo.get(al.grupo_id);
-                  const regs = registrosFiltrados.filter((r) => r.alumno_id === al.id);
-                  const pres = regs.filter(
-                    (r) => r.estado === 'presente' || r.estado === 'tarde'
-                  ).length;
-                  const aus = regs.filter((r) => r.estado === 'ausente').length;
-                  const alm =
-                    gr?.nombre === 'Colonia'
-                      ? regs.filter((r) => r.almuerzo).length
-                      : 0;
-                  const pct =
-                    regs.length > 0 ? Math.round((pres / regs.length) * 100) : null;
-                  const alerta = pct !== null && pct < 70;
-                  return {
-                    id: al.id,
-                    alumno: `${al.apellido}, ${al.nombre}`,
-                    area: gr?.nombre || '',
-                    categoria: gr?.categoria || '',
-                    presentes: pres,
-                    ausentes: aus,
-                    almuerzos: alm,
-                    total: regs.length,
-                    pct,
-                    alerta,
-                  };
-                })
-                .sort((a, b) => (a.alerta === b.alerta ? 0 : a.alerta ? -1 : 1));
-
-              const totalAlertas = matrizAlumnos.filter((m) => m.alerta).length;
-
-              const exportarExcelAnalisis = () => {
-                const filas = matrizAlumnos.map((m) => {
-                  const base: Record<string, any> = {
-                    Área: m.area,
-                    Grupo: m.categoria,
-                    Alumno: m.alumno,
-                    '% Asistencia': m.pct !== null ? `${m.pct}%` : '-',
-                    Presentes: m.presentes,
-                    Ausentes: m.ausentes,
-                    'Clases Registradas': m.total,
-                  };
-                  if (mostrarComidaAnalisis) {
-                    base['Almuerzos (Colonia)'] =
-                      m.area === 'Colonia' ? m.almuerzos : '-';
-                  }
-                  base.Estado =
-                    m.pct === null
-                      ? 'Sin registros'
-                      : m.alerta
-                      ? 'Seguimiento (<70%)'
-                      : 'Óptimo';
-                  return base;
-                });
-                const ws = XLSX.utils.json_to_sheet(filas);
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, 'Matriz_Asistencia');
-                XLSX.writeFile(
-                  wb,
-                  `UGI_Asistencia_${areaFiltro}_${fechaDesde}_a_${fechaHasta}.xlsx`
-                );
-              };
-
-              return (
-                <>
-                  {/* Filtros de período y grupo */}
-                  <div className="ugi-card">
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                      <div>
-                        <label htmlFor="f-desde" className="ugi-label">
-                          Desde
-                        </label>
-                        <input
-                          id="f-desde"
-                          type="date"
-                          value={fechaDesde}
-                          onChange={(e) => setFechaDesde(e.target.value)}
-                          className="ugi-input"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="f-hasta" className="ugi-label">
-                          Hasta
-                        </label>
-                        <input
-                          id="f-hasta"
-                          type="date"
-                          value={fechaHasta}
-                          onChange={(e) => setFechaHasta(e.target.value)}
-                          className="ugi-input"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="f-cat-coord" className="ugi-label">
-                          Grupo / Categoría
-                        </label>
-                        <select
-                          id="f-cat-coord"
-                          value={filtroCategoriaCoord}
-                          onChange={(e) => setFiltroCategoriaCoord(e.target.value)}
-                          className="ugi-select"
-                        >
-                          <option value="TODAS">
-                            Todos los grupos ({gruposAnalisis.length})
-                          </option>
-                          {gruposAnalisis.map((c) => (
-                            <option key={c.id} value={c.categoria}>
-                              {viendoAmbasAreas ? `${c.nombre} · ${c.categoria}` : c.categoria}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {rolSesion === 'admin' ? (
-                        <div>
-                          <label htmlFor="f-area-admin" className="ugi-label">
-                            Vista Dirección UGI
-                          </label>
-                          <select
-                            id="f-area-admin"
-                            value={filtroAreaAnalisis}
-                            onChange={(e) => {
-                              setFiltroAreaAnalisis(e.target.value);
-                              setFiltroCategoriaCoord('TODAS');
-                            }}
-                            className="ugi-select"
-                          >
-                            <option value="ACTUAL">Solo {deporteSeleccionado}</option>
-                            <option value="TODOS">Colonia + COYFD juntos</option>
-                          </select>
-                        </div>
-                      ) : (
-                        <div className="flex items-end">
-                          <button
-                            type="button"
-                            onClick={exportarExcelAnalisis}
-                            className="ugi-btn-sec w-full"
-                            style={{ minHeight: '48px' }}
-                          >
-                            <Download size={15} /> Bajar Excel
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Tarjetas de KPIs estilo Deportes UGI */}
-                  <div
-                    className="grid gap-2.5 mb-3.5"
-                    style={{
-                      gridTemplateColumns: mostrarComidaAnalisis
-                        ? 'repeat(4, 1fr)'
-                        : 'repeat(3, 1fr)',
-                    }}
-                  >
-                    <div className="ugi-kpi kpi-ok">
-                      <span>Asistencia</span>
-                      <b>{pctAsist}%</b>
-                      <span>{presentesTot} pres.</span>
-                    </div>
-
-                    <div className="ugi-kpi kpi-bad">
-                      <span>Ausentes</span>
-                      <b>{ausentesTot}</b>
-                      <span>en el período</span>
-                    </div>
-
-                    {mostrarComidaAnalisis && (
-                      <div className="ugi-kpi kpi-warn">
-                        <span>🍴 Almuerzos</span>
-                        <b>{almuerzosTot}</b>
-                        <span>en Colonia</span>
-                      </div>
-                    )}
-
-                    <div className="ugi-kpi">
-                      <span>Alertas (&lt;70%)</span>
-                      <b>{totalAlertas}</b>
-                      <span>seguimiento</span>
-                    </div>
-                  </div>
-
-                  {/* Rendimiento / Porcentaje por cada Grupo con barras estilo Deportes */}
-                  {gruposAnalisis.length > 0 && (
-                    <div className="ugi-card">
-                      <h3>Porcentaje de asistencia por grupo</h3>
-                      <p className="ugi-hint">
-                        Tocá un grupo para filtrar la matriz individual de abajo.
-                      </p>
-                      <div className="space-y-3">
-                        {gruposAnalisis.map((cat) => {
-                          const regsCat = registrosArea.filter(
-                            (r: any) => r.alumnos?.grupos?.id === cat.id
-                          );
-                          const presCat = regsCat.filter(
-                            (r: any) => r.estado === 'presente' || r.estado === 'tarde'
-                          ).length;
-                          const pctCat =
-                            regsCat.length > 0
-                              ? Math.round((presCat / regsCat.length) * 100)
-                              : 0;
-                          const almCat =
-                            cat.nombre === 'Colonia'
-                              ? regsCat.filter((r: any) => r.almuerzo).length
-                              : 0;
-                          const activo = filtroCategoriaCoord === cat.categoria;
-                          const colorBarra =
-                            pctCat >= 80
-                              ? 'var(--ok)'
-                              : pctCat >= 70
-                              ? 'var(--sky)'
-                              : 'var(--bad)';
-
-                          return (
-                            <button
-                              key={cat.id}
-                              type="button"
-                              onClick={() =>
-                                setFiltroCategoriaCoord(activo ? 'TODAS' : cat.categoria)
-                              }
-                              className={`w-full text-left p-3 rounded-xl border transition-all ${
-                                activo
-                                  ? 'bg-sky-50 border-sky-400 shadow-xs'
-                                  : 'bg-slate-50/70 border-slate-200 hover:bg-white'
-                              }`}
-                            >
-                              <div className="flex justify-between items-center text-sm font-bold mb-1.5 gap-2">
-                                <span className="text-slate-900">
-                                  {viendoAmbasAreas
-                                    ? `${cat.nombre} · ${cat.categoria}`
-                                    : cat.categoria}
-                                </span>
-                                <span className="text-xs font-extrabold text-slate-700">
-                                  {regsCat.length > 0
-                                    ? `${pctCat}% (${presCat}/${regsCat.length})`
-                                    : 'Sin registros'}
-                                  {cat.nombre === 'Colonia' && regsCat.length > 0
-                                    ? ` · 🍴 ${almCat}`
-                                    : ''}
-                                </span>
-                              </div>
-                              <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
-                                <div
-                                  style={{
-                                    width: `${pctCat}%`,
-                                    background: colorBarra,
-                                  }}
-                                  className="h-full rounded-full transition-all"
-                                />
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Matriz Individual de Alumnos (con alertas < 70%) */}
-                  <div className="ugi-card">
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                      <div>
-                        <h3>Matriz individual de asistencia</h3>
-                        <p className="ugi-hint" style={{ marginBottom: 0 }}>
-                          Se marca en seguimiento si el presentismo baja del 70%.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={exportarExcelAnalisis}
-                        className="ugi-btn-sec"
-                      >
-                        <Download size={14} /> Bajar Excel (.xlsx)
-                      </button>
-                    </div>
-
-                    <div
-                      tabIndex={0}
-                      role="region"
-                      aria-label="Matriz individual de asistencia"
-                      className="ugi-table-wrapper"
-                    >
-                      <table className="ugi-table">
-                        <thead>
-                          <tr>
-                            <th>Alumno</th>
-                            <th>Grupo</th>
-                            <th>Asist.</th>
-                            <th>Pres. / Total</th>
-                            {mostrarComidaAnalisis && <th>🍴 Comidas</th>}
-                            <th>Estado</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {cargandoAdmin ? (
-                            <tr>
-                              <td
-                                colSpan={mostrarComidaAnalisis ? 6 : 5}
-                                className="text-center py-6 text-slate-500"
-                              >
-                                Cargando datos...
-                              </td>
-                            </tr>
-                          ) : matrizAlumnos.length === 0 ? (
-                            <tr>
-                              <td
-                                colSpan={mostrarComidaAnalisis ? 6 : 5}
-                                className="text-center py-6 text-slate-500"
-                              >
-                                Sin alumnos en este filtro.
-                              </td>
-                            </tr>
-                          ) : (
-                            matrizAlumnos.map((m) => (
-                              <tr key={m.id} className="hover:bg-slate-50">
-                                <td className="font-bold text-slate-900">{m.alumno}</td>
-                                <td className="text-slate-600 text-xs font-semibold">
-                                  {viendoAmbasAreas
-                                    ? `${m.area} · ${m.categoria}`
-                                    : m.categoria}
-                                </td>
-                                <td className="font-extrabold">
-                                  {m.pct !== null ? `${m.pct}%` : '-'}
-                                </td>
-                                <td className="text-slate-600">
-                                  {m.presentes} / {m.total}
-                                </td>
-                                {mostrarComidaAnalisis && (
-                                  <td className="text-slate-700 font-semibold">
-                                    {m.area === 'Colonia' ? `🍴 ${m.almuerzos}` : '—'}
-                                  </td>
-                                )}
-                                <td>
-                                  {m.pct === null ? (
-                                    <span className="ugi-pill a">– Sin datos</span>
-                                  ) : m.alerta ? (
-                                    <span className="ugi-pill r">⚠ Seguimiento</span>
-                                  ) : (
-                                    <span className="ugi-pill v">✓ Óptimo</span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
+                <button
+                  type="button"
+                  onClick={borrarTodoArea}
+                  disabled={borrandoTodo}
+                  className="bg-red-600 hover:bg-red-700 disabled:bg-slate-400 text-white font-extrabold text-xs px-4 py-3 rounded-xl inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <Trash2 size={15} />
+                  {borrandoTodo
+                    ? `Borrando ${deporteSeleccionado}...`
+                    : `Borrar todo de ${deporteSeleccionado}`}
+                </button>
+              </div>
+            </div>
           </section>
         )}
 
@@ -2799,7 +3051,6 @@ export default function AsistenciaColoniaCoyfdApp() {
            ===================================================================== */}
         {tabActiva === 'config' && esCoordOAdmin && (
           <section aria-label="Configuración de contraseñas y Google Sheets">
-            {/* Contraseñas de Profe y Coordinación para Colonia y COYFD */}
             <div className="ugi-card">
               <h3>Contraseñas de acceso · Colonia y COYFD</h3>
               <p className="ugi-hint">
@@ -2838,9 +3089,9 @@ export default function AsistenciaColoniaCoyfdApp() {
                           <td className="font-extrabold text-slate-900">{d.nombre}</td>
                           <td>
                             {d.tieneComida ? (
-                              <span className="ugi-pill v">🍴 Siempre activa</span>
+                              <span className="ugi-pill v">🍴 Activa</span>
                             ) : (
-                              <span className="ugi-pill a">Sin comida</span>
+                              <span className="ugi-pill a">No</span>
                             )}
                           </td>
                           <td>
@@ -2925,8 +3176,7 @@ export default function AsistenciaColoniaCoyfdApp() {
             <div className="ugi-card">
               <h3>Planillas Google Sheets en vivo (Colonia y COYFD)</h3>
               <p className="ugi-hint">
-                Se actualizan automáticamente cada vez que un profe guarda la asistencia. En{' '}
-                <b>Colonia</b> incluye la columna de Almuerzos y en <b>COYFD</b> solo presentismo.
+                Se actualizan automáticamente cada vez que un profe guarda la asistencia.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
@@ -2940,9 +3190,6 @@ export default function AsistenciaColoniaCoyfdApp() {
                       <div>
                         <div className="font-extrabold text-slate-900 text-sm flex items-center justify-between">
                           <span>📊 Planilla {d.nombre}</span>
-                          <span className="text-[11px] font-bold text-slate-500">
-                            {d.tieneComida ? '🍴 Con almuerzos' : 'Sin comida'}
-                          </span>
                         </div>
                         <p className="text-xs text-slate-500 mt-1">
                           {url
