@@ -214,7 +214,7 @@ export default function AsistenciaColoniaCoyfdApp() {
 
   // Asistencia diaria
   const [asistencias, setAsistencias] = useState<Record<number, AsistenciaState>>({});
-  const [fecha, setFecha] = useState<string>(() => obtenerFechaLocal(0));
+  const [fecha, setFecha] = useState<string>('');
   const [cargando, setCargando] = useState(false);
   const [estadoConexion, setEstadoConexion] = useState<'ok' | 'warn'>('ok');
 
@@ -234,8 +234,8 @@ export default function AsistenciaColoniaCoyfdApp() {
   const [grupoDestinoExcel, setGrupoDestinoExcel] = useState('');
 
   // Estados de Análisis / Asistencias Pasadas y Google Sheets
-  const [fechaDesde, setFechaDesde] = useState<string>(() => obtenerFechaLocal(30));
-  const [fechaHasta, setFechaHasta] = useState<string>(() => obtenerFechaLocal(0));
+  const [fechaDesde, setFechaDesde] = useState<string>('');
+  const [fechaHasta, setFechaHasta] = useState<string>('');
   const [filtroAreaAnalisis, setFiltroAreaAnalisis] = useState<string>('ACTUAL');
   const [filtroCategoriaCoord, setFiltroCategoriaCoord] = useState<string>('TODAS');
   const [registrosAdmin, setRegistrosAdmin] = useState<RegistroAdminRow[]>([]);
@@ -431,6 +431,10 @@ export default function AsistenciaColoniaCoyfdApp() {
 
   // Restaurar sesión desde localStorage y traer configuración de Supabase
   useEffect(() => {
+    setFecha(obtenerFechaLocal(0));
+    setFechaDesde(obtenerFechaLocal(30));
+    setFechaHasta(obtenerFechaLocal(0));
+
     const timer = setTimeout(() => {
       try {
         const sheetsGuardados = localStorage.getItem('ugi_sheet_urls_colonia_coyfd_v2');
